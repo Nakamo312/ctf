@@ -12,7 +12,6 @@ const botInfo = {
   location: window.location.href,
   referrer: document.referrer
 };
-
 /* 2) кодируем (НЕ для DNS, а для webhook — можно) */
 const encodedInfo = btoa(JSON.stringify(botInfo));
 
